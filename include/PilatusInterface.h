@@ -2,7 +2,15 @@
 #define PILATUSINTERFACE_H
 
 #include "HwInterface.h"
+#include "HwBufferMgr.h"
+#include "Debug.h"
+#include "Data.h"
 #include "PilatusCommunication.h"
+#include "PilatusReader.h"
+
+using namespace lima;
+using namespace lima::PilatusCpp;
+using namespace std;
 
 namespace lima
 {
@@ -33,6 +41,9 @@ public:
 	virtual void getPixelSize(double& pixel_size);
 	virtual void getDetectorType(std::string& det_type);
 	virtual void getDetectorModel(std::string& det_model);
+	
+	virtual double getMinLatency();
+	virtual double get_max_latency();
 
 	virtual void registerMaxImageSizeCallback(HwMaxImageSizeCallback& cb){;};
 	virtual void unregisterMaxImageSizeCallback(HwMaxImageSizeCallback& cb){;};
@@ -52,9 +63,12 @@ class BufferCtrlObj : public HwBufferCtrlObj
 	DEB_CLASS_NAMESPC(DebModCamera, "BufferCtrlObj", "Pilatus");
 
 public:
-	BufferCtrlObj(Communication& simu);
+	BufferCtrlObj(Communication& com, DetInfoCtrlObj& det);
 	virtual ~BufferCtrlObj();
 
+	void start();
+	void stop();
+	void reset();
 	virtual void setFrameDim(const FrameDim& frame_dim);
 	virtual void getFrameDim(      FrameDim& frame_dim);
 
@@ -72,11 +86,20 @@ public:
 	virtual void getStartTimestamp(Timestamp& start_ts);
 	virtual void getFrameInfo(int acq_frame_nb, HwFrameInfoType& info);
 
+	// -- Buffer control bject
+	BufferCtrlMgr& 		getBufferMgr(){return m_buffer_ctrl_mgr;};
+	StdBufferCbMgr& 	getBufferCbMgr(){return m_buffer_cb_mgr;};
+	
 	virtual void registerFrameCallback(HwFrameCallback& frame_cb);
 	virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
-
 private:
-	BufferCtrlMgr& m_buffer_mgr;
+	int 				m_nb_buffer;
+	SoftBufferAllocMgr 	m_buffer_alloc_mgr;
+	StdBufferCbMgr 		m_buffer_cb_mgr;
+	BufferCtrlMgr 		m_buffer_ctrl_mgr;
+	Communication& 		m_com;
+	DetInfoCtrlObj& 	m_det;
+	Reader*				m_reader;
 };
 
 /*******************************************************************
@@ -89,7 +112,7 @@ class SyncCtrlObj : public HwSyncCtrlObj
 	DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Pilatus");
 
 public:
-	SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl);
+	SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det);
 	virtual ~SyncCtrlObj();
 
 	virtual bool checkTrigMode(TrigMode trig_mode);
@@ -106,9 +129,13 @@ public:
 	virtual void getNbHwFrames(int& nb_frames);
 
 	virtual void getValidRanges(ValidRangesType& valid_ranges);
+	
+	void prepareAcq();
 
 private:
-	Communication& m_com;
+	Communication& 		m_com;
+	DetInfoCtrlObj& 	m_det;
+	int 				m_nb_frames ;
 };
 
 

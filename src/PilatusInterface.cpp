@@ -1,14 +1,16 @@
-#include "PilatusInterface.h"
 #include <algorithm>
+#include "Debug.h"
+#include "Data.h"
+#include "PilatusReader.h"
+#include "PilatusInterface.h"
 
-using namespace lima;
-using namespace lima::PilatusCpp;
-using namespace std;
+
 
 /*******************************************************************
  * \brief DetInfoCtrlObj constructor
  *******************************************************************/
-DetInfoCtrlObj::DetInfoCtrlObj(Communication& com)   :m_com(com)
+DetInfoCtrlObj::DetInfoCtrlObj(Communication& com)
+				:m_com(com)
 {
 	DEB_CONSTRUCTOR();
 }
@@ -27,7 +29,8 @@ DetInfoCtrlObj::~DetInfoCtrlObj()
 void DetInfoCtrlObj::getMaxImageSize(Size& size)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getImageSize(size);
+	// get the max image size
+	getDetectorImageSize(size);
 }
 
 //-----------------------------------------------------
@@ -36,8 +39,10 @@ void DetInfoCtrlObj::getMaxImageSize(Size& size)
 void DetInfoCtrlObj::getDetectorImageSize(Size& size)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getDetectorImageSize(size);
+	// get the max image size of the detector
+	size= Size(2463,2527);
 }
+
 
 //-----------------------------------------------------
 //
@@ -45,7 +50,7 @@ void DetInfoCtrlObj::getDetectorImageSize(Size& size)
 void DetInfoCtrlObj::getDefImageType(ImageType& image_type)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getImageType(image_type);
+	getCurrImageType(image_type);
 }
 
 //-----------------------------------------------------
@@ -54,7 +59,7 @@ void DetInfoCtrlObj::getDefImageType(ImageType& image_type)
 void DetInfoCtrlObj::getCurrImageType(ImageType& image_type)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getImageType(image_type);
+	image_type= Bpp32;
 }
 
 //-----------------------------------------------------
@@ -75,7 +80,7 @@ void DetInfoCtrlObj::setCurrImageType(ImageType image_type)
 void DetInfoCtrlObj::getPixelSize(double& size)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getPixelSize(size);
+	size= 172.0;
 }
 
 //-----------------------------------------------------
@@ -84,7 +89,8 @@ void DetInfoCtrlObj::getPixelSize(double& size)
 void DetInfoCtrlObj::getDetectorType(std::string& type)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getDetectorType(type);
+	type  = "Pilatus";
+
 }
 
 //-----------------------------------------------------
@@ -93,19 +99,39 @@ void DetInfoCtrlObj::getDetectorType(std::string& type)
 void DetInfoCtrlObj::getDetectorModel(std::string& model)
 {
 	DEB_MEMBER_FUNCT();
-	m_com.getDetectorModel(model);
+	model = "Pilatus_6M";
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double DetInfoCtrlObj::getMinLatency()
+{
+	return 0.003;
+}
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double DetInfoCtrlObj::get_max_latency()
+{
+	return 2^31;
+}
+	
 /*******************************************************************
  * \brief BufferCtrlObj constructor
  *******************************************************************/
 
-BufferCtrlObj::BufferCtrlObj(Communication& com)
-		: m_buffer_mgr(com.getBufferMgr())
+BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
+				:
+					m_buffer_cb_mgr(m_buffer_alloc_mgr),
+					m_buffer_ctrl_mgr(m_buffer_cb_mgr),
+					m_com(com),
+					m_det(det)
 {
 	DEB_CONSTRUCTOR();
+	m_reader = new Reader(com,*this);
+	m_reader->go(2000);	
 }
 
 //-----------------------------------------------------
@@ -114,6 +140,8 @@ BufferCtrlObj::BufferCtrlObj(Communication& com)
 BufferCtrlObj::~BufferCtrlObj()
 {
 	DEB_DESTRUCTOR();
+	m_reader->stop();	
+	m_reader->exit();
 }
 
 //-----------------------------------------------------
@@ -122,7 +150,8 @@ BufferCtrlObj::~BufferCtrlObj()
 void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.setFrameDim(frame_dim);
+	m_buffer_ctrl_mgr.setFrameDim(frame_dim);	
+    return;
 }
 
 //-----------------------------------------------------
@@ -131,7 +160,43 @@ void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
 void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getFrameDim(frame_dim);
+	/*****@@TODO commented for test only
+	Size image_size;
+	m_det.getMaxImageSize(image_size);
+	frame_dim.setSize(image_size);
+	
+	ImageType image_type;	
+	m_det.getDefImageType(image_type);
+	frame_dim.setImageType(image_type);
+	********/
+	m_buffer_ctrl_mgr.getFrameDim(frame_dim);//remove or not ??	
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void BufferCtrlObj::start()
+{
+	DEB_MEMBER_FUNCT();
+	m_reader->start();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void BufferCtrlObj::stop()
+{
+	DEB_MEMBER_FUNCT();
+	m_reader->stop();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void BufferCtrlObj::reset()
+{
+	DEB_MEMBER_FUNCT();
+	m_reader->reset();
 }
 
 //-----------------------------------------------------
@@ -140,7 +205,7 @@ void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 void BufferCtrlObj::setNbBuffers(int nb_buffers)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.setNbBuffers(nb_buffers);
+	m_buffer_ctrl_mgr.setNbBuffers(nb_buffers);
 }
 
 //-----------------------------------------------------
@@ -149,7 +214,7 @@ void BufferCtrlObj::setNbBuffers(int nb_buffers)
 void BufferCtrlObj::getNbBuffers(int& nb_buffers)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getNbBuffers(nb_buffers);
+	m_buffer_ctrl_mgr.getNbBuffers(nb_buffers);
 }
 
 //-----------------------------------------------------
@@ -158,7 +223,7 @@ void BufferCtrlObj::getNbBuffers(int& nb_buffers)
 void BufferCtrlObj::setNbConcatFrames(int nb_concat_frames)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.setNbConcatFrames(nb_concat_frames);
+	m_buffer_ctrl_mgr.setNbConcatFrames(nb_concat_frames);
 }
 
 //-----------------------------------------------------
@@ -167,7 +232,7 @@ void BufferCtrlObj::setNbConcatFrames(int nb_concat_frames)
 void BufferCtrlObj::getNbConcatFrames(int& nb_concat_frames)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getNbConcatFrames(nb_concat_frames);
+	m_buffer_ctrl_mgr.getNbConcatFrames(nb_concat_frames);
 }
 
 //-----------------------------------------------------
@@ -176,7 +241,12 @@ void BufferCtrlObj::getNbConcatFrames(int& nb_concat_frames)
 void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getMaxNbBuffers(max_nb_buffers);
+	/*****@@TODO commented for test only
+	Size imageSize;
+	m_det.getMaxImageSize(imageSize);
+	max_nb_buffers = ( (Communication::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) )/2; //4 == image 32bits	
+	****/
+	m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
 }
 
 //-----------------------------------------------------
@@ -185,7 +255,7 @@ void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
 void *BufferCtrlObj::getBufferPtr(int buffer_nb, int concat_frame_nb)
 {
 	DEB_MEMBER_FUNCT();
-	return m_buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
+	return m_buffer_ctrl_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
 }
 
 //-----------------------------------------------------
@@ -194,7 +264,7 @@ void *BufferCtrlObj::getBufferPtr(int buffer_nb, int concat_frame_nb)
 void *BufferCtrlObj::getFramePtr(int acq_frame_nb)
 {
 	DEB_MEMBER_FUNCT();
-	return m_buffer_mgr.getFramePtr(acq_frame_nb);
+	return m_buffer_ctrl_mgr.getFramePtr(acq_frame_nb);
 }
 
 //-----------------------------------------------------
@@ -203,7 +273,7 @@ void *BufferCtrlObj::getFramePtr(int acq_frame_nb)
 void BufferCtrlObj::getStartTimestamp(Timestamp& start_ts)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getStartTimestamp(start_ts);
+	m_buffer_ctrl_mgr.getStartTimestamp(start_ts);
 }
 
 //-----------------------------------------------------
@@ -212,8 +282,9 @@ void BufferCtrlObj::getStartTimestamp(Timestamp& start_ts)
 void BufferCtrlObj::getFrameInfo(int acq_frame_nb, HwFrameInfoType& info)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.getFrameInfo(acq_frame_nb, info);
+	m_buffer_ctrl_mgr.getFrameInfo(acq_frame_nb, info);
 }
+
 
 //-----------------------------------------------------
 //
@@ -221,7 +292,8 @@ void BufferCtrlObj::getFrameInfo(int acq_frame_nb, HwFrameInfoType& info)
 void BufferCtrlObj::registerFrameCallback(HwFrameCallback& frame_cb)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.registerFrameCallback(frame_cb);
+	//@TODO
+	m_buffer_ctrl_mgr.registerFrameCallback(frame_cb);
 }
 
 //-----------------------------------------------------
@@ -230,7 +302,8 @@ void BufferCtrlObj::registerFrameCallback(HwFrameCallback& frame_cb)
 void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
 {
 	DEB_MEMBER_FUNCT();
-	m_buffer_mgr.unregisterFrameCallback(frame_cb);
+	//@TODO
+	m_buffer_ctrl_mgr.unregisterFrameCallback(frame_cb);
 }
 
 
@@ -239,8 +312,8 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  * \brief SyncCtrlObj constructor
  *******************************************************************/
 
-SyncCtrlObj::SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl)
-		: HwSyncCtrlObj(buffer_ctrl), m_com(com)
+SyncCtrlObj::SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det)
+			: HwSyncCtrlObj(buffer_ctrl), m_com(com), m_det(det)
 {
 }
 
@@ -279,7 +352,17 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 	DEB_MEMBER_FUNCT();
 	if (!checkTrigMode(trig_mode))
 		THROW_HW_ERROR(InvalidValue) << "Invalid " << DEB_VAR1(trig_mode);
-	m_com.setTrigMode(trig_mode);
+	Communication::TriggerMode trig;
+	switch(trig_mode)
+	{
+		case IntTrig :	 trig = Communication::INTERNAL; break;
+		case IntTrigMult : trig = Communication::INTERNAL_TRIG_MULTI; break;
+		case ExtTrigSingle : trig = Communication::EXTERNAL_START; break;
+		case ExtTrigMult : trig = Communication::EXTERNAL_MULTI_START; break;
+		case ExtGate : trig = Communication::EXTERNAL_GATE; break;
+	}
+								   
+	m_com.setTriggerMode(trig);
 
 }
 
@@ -288,12 +371,25 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 {
-	m_com.getTrigMode(trig_mode);
+	Communication::TriggerMode trig = m_com.triggerMode();
+	switch(trig)
+	{
+		case Communication::INTERNAL :	 trig_mode = IntTrig; break;
+		case Communication::INTERNAL_TRIG_MULTI : trig_mode = IntTrigMult; break;
+		case Communication::EXTERNAL_START : trig_mode = ExtTrigSingle; break;
+		case Communication::EXTERNAL_MULTI_START : trig_mode = ExtTrigMult; break;
+		case Communication::EXTERNAL_GATE : trig_mode = ExtGate; break;
+	}	
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void SyncCtrlObj::setExpTime(double exp_time)
 {
-	m_com.setExpTime(exp_time);
+	/*****@@TODO commented for test only
+	m_com.setExposure(exp_time);
+	***/
 }
 
 //-----------------------------------------------------
@@ -301,7 +397,9 @@ void SyncCtrlObj::setExpTime(double exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::getExpTime(double& exp_time)
 {
-	m_com.getExpTime(exp_time);
+	/*****@@TODO commented for test only
+	exp_time = m_com.exposure();
+	***/
 }
 
 //-----------------------------------------------------
@@ -309,12 +407,12 @@ void SyncCtrlObj::getExpTime(double& exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::setLatTime(double lat_time)
 {
-	m_com.setLatTime(lat_time);
+	//@TODO
 }
 
 void SyncCtrlObj::getLatTime(double& lat_time)
 {
-	m_com.getLatTime(lat_time);
+	//@TODO
 }
 
 //-----------------------------------------------------
@@ -322,7 +420,7 @@ void SyncCtrlObj::getLatTime(double& lat_time)
 //-----------------------------------------------------
 void SyncCtrlObj::setNbHwFrames(int nb_frames)
 {
-	m_com.setNbFrames(nb_frames);
+	m_nb_frames = nb_frames;
 }
 
 //-----------------------------------------------------
@@ -330,7 +428,7 @@ void SyncCtrlObj::setNbHwFrames(int nb_frames)
 //-----------------------------------------------------
 void SyncCtrlObj::getNbHwFrames(int& nb_frames)
 {
-	m_com.getNbFrames(nb_frames);
+	nb_frames =  m_nb_frames;
 }
 
 //-----------------------------------------------------
@@ -346,6 +444,24 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 	valid_ranges.max_lat_time = max_time;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void SyncCtrlObj:: prepareAcq()
+{
+	/*****@@TODO commented for test only
+	double exposure =  m_com.exposure();
+	double latency = m_det.getMinLatency();
+	double exposure_period = exposure + latency;
+	m_com.setExposurePeriod(exposure_period);
+
+	TrigMode trig_mode;
+	getTrigMode(trig_mode);
+	int nb_frames = (trig_mode == IntTrigMult)?1:m_nb_frames;
+	m_com.setNbImagesInSequence(nb_frames);
+	***/
+	m_nb_frames  = 5;//remove this
+}
 
 
 /*******************************************************************
@@ -353,7 +469,10 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
  *******************************************************************/
 
 Interface::Interface(Communication& com)
-		: m_com(com),m_det_info(com), m_buffer(com),m_sync(com, m_buffer)
+			: 	m_com(com),
+				m_det_info(com),
+				m_buffer(com,m_det_info ),
+				m_sync(com, m_buffer, m_det_info)
 {
 	DEB_CONSTRUCTOR();
 
@@ -412,7 +531,15 @@ void Interface::reset(ResetLevel reset_level)
 void Interface::prepareAcq()
 {
 	DEB_MEMBER_FUNCT();
-	m_com.prepareAcq();
+	/*****@@TODO commented for test only
+	Communication::Status com_status = Communication::OK;
+	com_status = m_com.status();	
+	if (com_status == Communication::DISCONNECTED)
+		m_com.connect(m_com.serverIP().c_str(),m_com.serverPort());
+    m_buffer.reset();
+	m_sync.prepareAcq();    
+    ****/
+m_sync.prepareAcq();//remove this
 }
 
 //-----------------------------------------------------
@@ -421,7 +548,11 @@ void Interface::prepareAcq()
 void Interface::startAcq()
 {
 	DEB_MEMBER_FUNCT();
-	m_com.startAcq();
+	/*****@@TODO commented for test only
+	m_com.startAcquisition();	
+	m_buffer.start();
+	**/
+	m_buffer.start();
 }
 
 //-----------------------------------------------------
@@ -430,7 +561,8 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
 	DEB_MEMBER_FUNCT();
-	m_com.stopAcq();
+	m_com.stopAcquisition();
+	m_buffer.stop();
 }
 
 //-----------------------------------------------------
@@ -438,31 +570,35 @@ void Interface::stopAcq()
 //-----------------------------------------------------
 void Interface::getStatus(StatusType& status)
 {
-	Communication::Status Pilatus_status = Communication::Ready;
-	m_com.getStatus(Pilatus_status);
-	switch (Pilatus_status)
+
+	Communication::Status com_status = Communication::OK;
+	com_status = m_com.status();
+	if(com_status == Communication::ERROR)
 	{
-	case Communication::Ready:
-		status.acq = AcqReady;
-		status.det = DetIdle;
-		break;
-	case Communication::Exposure:
-		status.det = DetExposure;
-		status.acq = AcqRunning;
-		break;
-	case Communication::Readout:
-		status.det = DetReadout;
-		status.acq = AcqRunning;
-		break;
-	case Communication::Latency:
-		status.det = DetLatency;
-		status.acq = AcqRunning;
-		break;
-	case Communication::Fault:
 		status.det = DetFault;
-		status.acq = AcqFault;
+		status.acq = AcqFault;		
 	}
-	status.det_mask = DetExposure | DetReadout | DetLatency;
+	else
+	{
+		if(com_status != Communication::OK)
+		{
+			status.det = DetExposure;
+			status.acq = AcqRunning;		
+		}
+		else
+		{
+			status.det = DetIdle;
+            int lastAcquiredFrame = -1;//self.__buffer.getLastAcquiredFrame()
+            int requestNbFrame = -1;
+			m_sync.getNbHwFrames(requestNbFrame);
+			if(lastAcquiredFrame >= 0 && lastAcquiredFrame == (requestNbFrame - 1))
+				status.acq = AcqReady;
+			else
+				status.acq = AcqRunning;
+		}
+	}
+	status.det_mask = DetExposure|DetFault;
+
 }
 
 //-----------------------------------------------------
@@ -471,8 +607,8 @@ void Interface::getStatus(StatusType& status)
 int Interface::getNbHwAcquiredFrames()
 {
 	DEB_MEMBER_FUNCT();
-	int acq_frames;
-	m_com.getNbHwAcquiredFrames(acq_frames);
+	int acq_frames = 1;
+	//self.__buffer.getLastAcquiredFrame() + 1
 	return acq_frames;
 }
 
