@@ -39,8 +39,9 @@
 
 #include <poll.h>
 
-#include "PilatusCommunication.h"
 #include "Exceptions.h"
+
+#include "PilatusCommunication.h"
 
 using namespace lima;
 using namespace lima::PilatusCpp;
@@ -52,12 +53,16 @@ const char* Communication::DEFAULT_FILE_BASE = "tmp_img_";
 const char* Communication::DEFAULT_FILE_EXTENTION = ".edf";
 const char* Communication::DEFAULT_FILE_PATERN = "tmp_img_%.5d.edf";
 
-#define WAIT_UNTIL(testState,errmsg) while(m_state != testState)	\
-  {							  \
-    if(!m_cond.wait(TIME_OUT))				  \
-      THROW_HW_ERROR(lima::Error) << errmsg;			  \
-  }
 
+#define WAIT_UNTIL(testState,errmsg) while(m_state != testState)	\
+{							  										\
+  if(!m_cond.wait(TIME_OUT))				  						\
+	THROW_HW_ERROR(lima::Error) << errmsg;			  				\
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 inline void _split(const std::string inString, const std::string &separator,std::vector<std::string> &returnVector)
 {
 	std::string::size_type start = 0;
@@ -72,23 +77,31 @@ inline void _split(const std::string inString, const std::string &separator,std:
 	returnVector.push_back (inString.substr (start));
 }
 
-Communication::Communication(const char *host,int port) :
-		m_socket(-1),
-		m_stop(false),
-		m_thread_id(0),
-		m_state(DISCONNECTED)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+Communication::Communication(const char *host,int port)
+				: 	m_socket(-1),
+					m_stop(false),
+					m_thread_id(0),
+					m_state(DISCONNECTED)
 {
 	DEB_CONSTRUCTOR();
+	m_server_ip 	 = host;
+	m_server_port	 = port;
 	_initVariable();
 
 	if(pipe(m_pipes))
 		THROW_HW_ERROR(Error) << "Can't open pipe";
 
-	pthread_create(&m_thread_id,NULL,run_func,this);
-
+	pthread_create(&m_thread_id,NULL,_runFunc,this);
+	
 	connect(host,port);
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 Communication::~Communication()
 {
 	AutoMutex aLock(m_cond.mutex());
@@ -98,20 +111,40 @@ Communication::~Communication()
 	else
 		write(m_pipes[1],"|",1);
 	aLock.unlock();
+
 	void *returnPt;
 	if(m_thread_id > 0)
 		pthread_join(m_thread_id,&returnPt);
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+std::string Communication::serverIP() const
+{
+	return m_server_ip;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+int Communication::serverPort() const
+{
+	return m_server_port;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::_initVariable()
 {
-	m_threshold = -1;
-	m_gain = DEFAULT_GAIN;
-	m_exposure = -1.;
-	m_nimages = 1;
-	m_exposure_period = -1.;
-	m_hardware_trigger_delay = -1.;
-	m_exposure_per_frame = 1;
+	m_threshold 						= -1;
+	m_gain 								= DEFAULT_GAIN;
+	m_exposure	 						= -1.;
+	m_nimages 							= 1;
+	m_exposure_period 					= -1.;
+	m_hardware_trigger_delay			= -1.;
+	m_exposure_per_frame 				= 1;
 
 	GAIN_SERVER_RESPONSE["low"]			= LOW;
 	GAIN_SERVER_RESPONSE["mid"] 		= MID;
@@ -123,6 +156,10 @@ void Communication::_initVariable()
 	GAIN_VALUE2SERVER[HIGH] 			= "highG";
 	GAIN_VALUE2SERVER[ULTRA_HIGH] 		= "uhighG";
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::connect(const char *host,int port)
 {
 	DEB_MEMBER_FUNCT();
@@ -157,11 +194,13 @@ void Communication::connect(const char *host,int port)
 			}
 			else
 				THROW_HW_ERROR(Error) << "Can't create socket";
-
 		}
 	}
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::_resync()
 {
 	send("SetThreshold");
@@ -176,28 +215,41 @@ void Communication::_resync()
 	send("dbglvl 1");
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::_reinit()
 {
 	_resync();
 	send("nimages");
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::send(const std::string& message)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_PARAM() << DEB_VAR1(message);
+
 	std::string msg = message;
 	msg+= '\030';
 	write(m_socket,msg.c_str(),msg.size());
 }
 
-void* Communication::run_func(void *commPt)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void* Communication::_runFunc(void *commPt)
 {
-	((Communication*)commPt)->run();
+	((Communication*)commPt)->_run();
 	return NULL;
 }
 
-void Communication::run()
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Communication::_run()
 {
 	DEB_MEMBER_FUNCT();
 	struct pollfd fds[2];
@@ -236,8 +288,7 @@ void Communication::run()
 			{
 				std::vector<std::string> msg_vector;
 				_split(messages,"\030",msg_vector); // '\x18' == '\030'
-				for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin();
-				        msg_iterator != msg_vector.end();++msg_iterator)
+				for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin(); msg_iterator != msg_vector.end();++msg_iterator)
 				{
 					std::string &msg = *msg_iterator;
 					DEB_TRACE() << "messages rx : " << msg;
@@ -357,24 +408,37 @@ void Communication::run()
 	}
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 Communication::Status Communication::status() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_state;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 const std::string& Communication::errorMessage() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_error_message;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::softReset()
 {
 	AutoMutex aLock(m_cond.mutex());
 	m_error_message.clear();
 	m_state = Communication::OK;
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::hardReset()
 {
 	AutoMutex aLock(m_cond.mutex());
@@ -386,13 +450,18 @@ int Communication::threshold() const
 	return m_threshold;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 Communication::Gain Communication::gain() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_gain;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setThresholdGain(int value,Communication::Gain gain)
 {
 	DEB_MEMBER_FUNCT();
@@ -421,17 +490,22 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
 	if (m_gap_fill)
 		send("gapfill -1");
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 double Communication::exposure() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_exposure;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setExposure(double val)
 {
 	DEB_MEMBER_FUNCT();
-
 	AutoMutex aLock(m_cond.mutex());
 	// yet an other border-effect with the SPEC CCD interface
 	// to reach the GATE mode SPEC programs extgate + expotime = 0
@@ -445,13 +519,18 @@ void Communication::setExposure(double val)
 	send(msg.str());
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 double Communication::exposurePeriod() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_exposure_period;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setExposurePeriod(double val)
 {
 	DEB_MEMBER_FUNCT();
@@ -464,13 +543,18 @@ void Communication::setExposurePeriod(double val)
 	send(msg.str());
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 int Communication::nbImagesInIequence() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_nimages;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setNbImagesInSequence(int nb)
 {
 	DEB_MEMBER_FUNCT();
@@ -482,15 +566,18 @@ void Communication::setNbImagesInSequence(int nb)
 	send(msg.str());
 }
 
-
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 double Communication::hardwareTriggerDelay() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_hardware_trigger_delay;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setHardwareTriggerDelay(double value)
 {
 	DEB_MEMBER_FUNCT();
@@ -502,13 +589,19 @@ void Communication::setHardwareTriggerDelay(double value)
 	msg << "delay " << value;
 	send(msg.str());
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 int Communication::nbExposurePerFrame() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_exposure_per_frame;
 }
 
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setNbExposurePerFrame(int val)
 {
 	DEB_MEMBER_FUNCT();
@@ -521,13 +614,16 @@ void Communication::setNbExposurePerFrame(int val)
 	send(msg.str());
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 Communication::TriggerMode Communication::triggerMode() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_trigger_mode;
 }
 
-
+//-----------------------------------------------------
 //@brief set the trigger mode
 //
 //Trigger can be:
@@ -535,12 +631,17 @@ Communication::TriggerMode Communication::triggerMode() const
 // - External start == EXTERNAL_START
 // - External multi start == EXTERNAL_MULTI_START
 // - External gate == EXTERNAL_GATE
+//-----------------------------------------------------
 void Communication::setTriggerMode(Communication::TriggerMode triggerMode)
 {
 	AutoMutex aLock(m_cond.mutex());
 	m_trigger_mode = triggerMode;
 }
 
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::startAcquisition(int image_number)
 {
 	DEB_MEMBER_FUNCT();
@@ -593,6 +694,9 @@ void Communication::startAcquisition(int image_number)
 	m_state = Communication::RUNNING;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::stopAcquisition()
 {
 	AutoMutex aLock(m_cond.mutex());
@@ -603,8 +707,9 @@ void Communication::stopAcquisition()
 	}
 }
 
-
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Communication::setGapfill(bool val)
 {
 	AutoMutex aLock(m_cond.mutex());
@@ -614,8 +719,14 @@ void Communication::setGapfill(bool val)
 	send(msg.str());
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 bool Communication::gapfill() const
 {
 	AutoMutex aLock(m_cond.mutex());
 	return m_gap_fill;
 }
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
