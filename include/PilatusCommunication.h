@@ -72,8 +72,6 @@ public:
 	//s
 	static const char *			DEFAULT_PATH;
 	static const long long 		DEFAULT_TMPFS_SIZE = 8LL * 1024 * 1024 * 1024;// 8Go
-	static const char* 			DEFAULT_FILE_BASE;
-	static const char* 			DEFAULT_FILE_EXTENTION;
 	static const char* 			DEFAULT_FILE_PATERN;
 	static const double 		TIME_OUT = 10.;
 	

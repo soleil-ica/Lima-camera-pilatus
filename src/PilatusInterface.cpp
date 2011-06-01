@@ -130,8 +130,8 @@ BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
 					m_det(det)
 {
 	DEB_CONSTRUCTOR();
-	m_reader = new Reader(com,*this);
-	m_reader->go(2000);	
+	////m_reader = new Reader(com,*this);
+	////m_reader->go(2000);	
 }
 
 //-----------------------------------------------------
@@ -140,8 +140,8 @@ BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
 BufferCtrlObj::~BufferCtrlObj()
 {
 	DEB_DESTRUCTOR();
-	m_reader->stop();	
-	m_reader->exit();
+	////m_reader->stop();	
+	////m_reader->exit();
 }
 
 //-----------------------------------------------------
@@ -160,7 +160,8 @@ void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
 void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 {
 	DEB_MEMBER_FUNCT();
-	/*****@@TODO commented for test only
+	
+	/*
 	Size image_size;
 	m_det.getMaxImageSize(image_size);
 	frame_dim.setSize(image_size);
@@ -168,7 +169,7 @@ void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 	ImageType image_type;	
 	m_det.getDefImageType(image_type);
 	frame_dim.setImageType(image_type);
-	********/
+	*/
 	m_buffer_ctrl_mgr.getFrameDim(frame_dim);//remove or not ??	
 }
 
@@ -178,7 +179,7 @@ void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 void BufferCtrlObj::start()
 {
 	DEB_MEMBER_FUNCT();
-	m_reader->start();
+	////m_reader->start();
 }
 
 //-----------------------------------------------------
@@ -187,7 +188,7 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
 	DEB_MEMBER_FUNCT();
-	m_reader->stop();
+	////m_reader->stop();
 }
 
 //-----------------------------------------------------
@@ -196,7 +197,7 @@ void BufferCtrlObj::stop()
 void BufferCtrlObj::reset()
 {
 	DEB_MEMBER_FUNCT();
-	m_reader->reset();
+	////m_reader->reset();
 }
 
 //-----------------------------------------------------
@@ -241,12 +242,12 @@ void BufferCtrlObj::getNbConcatFrames(int& nb_concat_frames)
 void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
 {
 	DEB_MEMBER_FUNCT();
-	/*****@@TODO commented for test only
+
 	Size imageSize;
 	m_det.getMaxImageSize(imageSize);
 	max_nb_buffers = ( (Communication::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) )/2; //4 == image 32bits	
-	****/
-	m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
+cout<<"> max_nb_buffers = "<<max_nb_buffers<<endl;
+	////m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
 }
 
 //-----------------------------------------------------
@@ -387,9 +388,8 @@ void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::setExpTime(double exp_time)
 {
-	/*****@@TODO commented for test only
+
 	m_com.setExposure(exp_time);
-	***/
 }
 
 //-----------------------------------------------------
@@ -397,9 +397,7 @@ void SyncCtrlObj::setExpTime(double exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::getExpTime(double& exp_time)
 {
-	/*****@@TODO commented for test only
 	exp_time = m_com.exposure();
-	***/
 }
 
 //-----------------------------------------------------
@@ -449,18 +447,20 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 //-----------------------------------------------------
 void SyncCtrlObj:: prepareAcq()
 {
-	/*****@@TODO commented for test only
+
 	double exposure =  m_com.exposure();
+cout<<"> exposure = "<<exposure<<endl;
 	double latency = m_det.getMinLatency();
+cout<<"> latency = "<<latency<<endl;
 	double exposure_period = exposure + latency;
+cout<<"> exposure_period = "<<exposure_period<<endl;
 	m_com.setExposurePeriod(exposure_period);
 
 	TrigMode trig_mode;
 	getTrigMode(trig_mode);
 	int nb_frames = (trig_mode == IntTrigMult)?1:m_nb_frames;
 	m_com.setNbImagesInSequence(nb_frames);
-	***/
-	m_nb_frames  = 5;//remove this
+
 }
 
 
@@ -531,15 +531,14 @@ void Interface::reset(ResetLevel reset_level)
 void Interface::prepareAcq()
 {
 	DEB_MEMBER_FUNCT();
-	/*****@@TODO commented for test only
+
 	Communication::Status com_status = Communication::OK;
 	com_status = m_com.status();	
 	if (com_status == Communication::DISCONNECTED)
 		m_com.connect(m_com.serverIP().c_str(),m_com.serverPort());
     m_buffer.reset();
 	m_sync.prepareAcq();    
-    ****/
-m_sync.prepareAcq();//remove this
+
 }
 
 //-----------------------------------------------------
@@ -548,10 +547,7 @@ m_sync.prepareAcq();//remove this
 void Interface::startAcq()
 {
 	DEB_MEMBER_FUNCT();
-	/*****@@TODO commented for test only
 	m_com.startAcquisition();	
-	m_buffer.start();
-	**/
 	m_buffer.start();
 }
 
@@ -613,4 +609,40 @@ int Interface::getNbHwAcquiredFrames()
 }
 
 //-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setMxSettings(const std::string& str)
+{
+	std::string str_to_send ="mxsettings ";
+	str_to_send+=str;
+	m_com.send(str);	
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setThresholdGain(int threshold, Communication::Gain gain)
+{
+	m_com.setThresholdGain(threshold, gain);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+int Interface::getThreshold(void)
+{
+	return m_com.threshold();
+}
+
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+Communication::Gain Interface::getGain(void)
+{
+	return m_com.gain();
+}
+//-----------------------------------------------------
+
+
 

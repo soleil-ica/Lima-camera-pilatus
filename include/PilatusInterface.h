@@ -153,20 +153,26 @@ public:
 	virtual 		~Interface();
 
 	//- From HwInterface
-	virtual void 	getCapList(CapList&) const;
-	virtual void	reset(ResetLevel reset_level);
-	virtual void 	prepareAcq();
-	virtual void 	startAcq();
-	virtual void 	stopAcq();
-	virtual void 	getStatus(StatusType& status);
-	virtual int 	getNbHwAcquiredFrames();
+	virtual void 		getCapList(CapList&) const;
+	virtual void		reset(ResetLevel reset_level);
+	virtual void		prepareAcq();
+	virtual void	 	startAcq();
+	virtual void	 	stopAcq();
+	virtual void	 	getStatus(StatusType& status);
+	virtual int 		getNbHwAcquiredFrames();
+
+	//Specific pilatus funtions
+	void 				setMxSettings(const std::string& str);
+	void 				setThresholdGain(int threshold, Communication::Gain gain);
+	int 				getThreshold(void);
+	Communication::Gain	getGain(void);
 
 private:
-	Communication&	m_com;
-	CapList 		m_cap_list;
-	DetInfoCtrlObj	m_det_info;
-	BufferCtrlObj	m_buffer;
-	SyncCtrlObj		m_sync;
+	Communication&		m_com;
+	CapList 			m_cap_list;
+	DetInfoCtrlObj		m_det_info;
+	BufferCtrlObj		m_buffer;
+	SyncCtrlObj			m_sync;
 };
 
 

@@ -19,7 +19,7 @@ Reader::Reader(Communication& com, HwBufferCtrlObj& buffer_ctrl)
 	  : m_com(com),
 		m_buffer(buffer_ctrl),
 		m_stop_already_done(true),
-		my_file_image("/home/informatique/ica/noureddine/DeviceSources/data/image.txt"),
+		my_file_image("./image.txt"),
 		raw_data("")
 {
 	DEB_CONSTRUCTOR();

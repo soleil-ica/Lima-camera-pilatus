@@ -49,9 +49,7 @@ using namespace lima::PilatusCpp;
 
 
 const char* Communication::DEFAULT_PATH = "/lima_data";
-const char* Communication::DEFAULT_FILE_BASE = "tmp_img_";
-const char* Communication::DEFAULT_FILE_EXTENTION = ".edf";
-const char* Communication::DEFAULT_FILE_PATERN = "tmp_img_%.5d.edf";
+const char* Communication::DEFAULT_FILE_PATERN = "tmp_img_%.5d.cbf";
 
 
 #define WAIT_UNTIL(testState,errmsg) while(m_state != testState)	\
@@ -247,7 +245,16 @@ void* Communication::_runFunc(void *commPt)
 }
 
 //-----------------------------------------------------
-//
+/*AU DEMARRAGE
+15 OK  Settings: mid gain; threshold: 6000 eV; vcmp: 0.679 V
+ Trim file:
+  /home/det/p2_det/config/calibration/p6m0106_E12000_T6000_vrf_m0p20.bin15 OK Exposure time set to: 0.1000000 sec.15 OK Exposure period set to: 0.103000 sec10 ERR mkdir() failed15 OK Delay time set to: 0.000000 sec.15 OK Exposures per frame set to: 115 OK
+*/
+/*AU START
+15 OK Exposure time set to: 0.1000000 sec.eV; vcmp: 0.679 V
+ Trim file:
+  /home/det/p2_det/config/calibration/p6m0106_E12000_T6000_vrf_m0p20.bin15 OK Exposure time set to: 0.1000000 sec.15 OK Exposure period set to: 0.103000 sec10 ERR mkdir() failed15 OK Delay time set to: 0.000000 sec.15 OK Exposures per frame set to: 115 OK
+*/ 
 //-----------------------------------------------------
 void Communication::_run()
 {
@@ -280,71 +287,94 @@ void Communication::_run()
 			int aMessageSize = recv(m_socket,messages,sizeof(messages),0);
 			if(!aMessageSize)
 			{
+				DEB_TRACE() <<"-->no message received";
 				close(m_socket);
 				m_socket = -1;
 				m_state = DISCONNECTED;
 			}
 			else
 			{
+				DEB_TRACE() << "-->messages = "<<messages;
 				std::vector<std::string> msg_vector;
-				_split(messages,"\030",msg_vector); // '\x18' == '\030'
+				_split(messages,"\x18",msg_vector); // '\x18' == '\030'
 				for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin(); msg_iterator != msg_vector.end();++msg_iterator)
 				{
 					std::string &msg = *msg_iterator;
-					DEB_TRACE() << "messages rx : " << msg;
+					DEB_TRACE() << "-->messages rx : " << msg;
+
 					if(msg.substr(0,2) == "15") // generic response
 					{
-						if(msg.substr(3,5) == "OK") // will check what the message is about
+						DEB_TRACE() << "-->15";
+						if(msg.substr(3,2) == "OK") // will check what the message is about
 						{
+							DEB_TRACE() << "-->OK";
 							std::string real_message = msg.substr(6);
-							if(!real_message.find_first_of("Settings:")) // Threshold and gain is already set,read them
+							DEB_TRACE() << "-->real_message : "<<real_message;
+							if(real_message.find("Settings:")!=std::string::npos) // Threshold and gain is already set,read them
 							{
+								DEB_TRACE() << "-->Settings:";
 								std::vector<std::string> threshold_vector;
-								_split(msg.substr(15),";",threshold_vector);
+								_split(msg.substr(17),";",threshold_vector);
 								std::string &gain_string = threshold_vector[0];
+								DEB_TRACE() << ">>>>>>> gain_string = "<<gain_string;
 								std::string &threshold_string = threshold_vector[1];
-
+								DEB_TRACE() << ">>>>>>> threshold_string = "<<threshold_string;
 								std::vector<std::string> thr_val;
 								_split(threshold_string," ",thr_val);
-								std::string &threshold_value = thr_val[1];
+								std::string &threshold_value = thr_val[2];
 								m_threshold = atoi(threshold_value.c_str());
-
+								DEB_TRACE() << "-->m_threshold = "<<m_threshold;
+								
 								std::vector<std::string> gain_split;
 								_split(gain_string," ",gain_split);//TODO CHECK
 								int gain_size = gain_split.size();
-								std::string &gain_value = gain_split[gain_size - 1];
+								std::string &gain_value = gain_split[/*gain_size - 1*/0];
 								std::map<std::string,Gain>::iterator gFind = GAIN_SERVER_RESPONSE.find(gain_value);
 								m_gain = gFind->second;
+								DEB_TRACE() << "-->m_gain = "<<m_gain;
 							}
-							else if(!real_message.find_first_of("/tmp/setthreshold"))
+							else if(real_message.find("/tmp/setthreshold")!=std::string::npos)
 							{
+								DEB_TRACE() << "-->/tmp/setthreshold";
 								m_state = Communication::OK;
 								_reinit(); // resync with server
 							}
-							else if(!real_message.find_first_of("Exposure"))
+							else if(real_message.find("Exposure")!=std::string::npos)
 							{
+								DEB_TRACE() << "-->Exposure";
 								int columnPos = real_message.find(":");
 								int lastSpace = real_message.rfind(" ");
-								if(real_message.substr(9) == "time")
+								if(real_message.substr(9,4) == "time")
+								{
 									m_exposure = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-								else if(real_message.substr(9) == "period")
+									DEB_TRACE() << "-->time = "<<m_exposure;
+								}
+								else if(real_message.substr(9,6) == "period")
+								{									
 									m_exposure_period = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
+									DEB_TRACE() << "-->period = "<<m_exposure_period;
+								}
 								else // Exposures per frame
-									m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());
+								{									
+									m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());\
+									DEB_TRACE() << "-->exposure_per_frame = "<<m_exposure_per_frame;
+								}
 
 								m_state = Communication::OK;
 							}
-							else if(!real_message.find_first_of("Delay"))
+							else if(real_message.find("Delay")!=std::string::npos)
 							{
 								int columnPos = real_message.find(":");
 								int lastSpace = real_message.rfind(" ");
 								m_hardware_trigger_delay = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
+								DEB_TRACE() << "-->Delay = "<<m_hardware_trigger_delay;
 								m_state = Communication::OK;
 							}
-							else if(!real_message.find_first_of("N images"))
+							else if(real_message.find("N images")!=std::string::npos)
 							{
 								int columnPos = real_message.find(":");
-								m_nimages = int(real_message.substr(columnPos+1).c_str());
+								m_nimages = atoi(real_message.substr(columnPos+1).c_str());
+								DEB_TRACE() << "-->N images = "<<m_nimages;
 								m_state = Communication::OK;
 							}
 							else if(m_state == Communication::SETTING_THRESHOLD)
@@ -374,7 +404,7 @@ void Communication::_run()
 					{
 						if(msg[0] == '7')
 						{
-							if(msg.substr(2,4) == "OK")
+							if(msg.substr(2,2) == "OK")
 								m_state = Communication::OK;
 							else
 							{
@@ -384,13 +414,13 @@ void Communication::_run()
 								{
 									m_state = Communication::ERROR;
 									msg = msg.substr(2);
-									m_error_message = msg.substr(msg.find_first_of(" "));
+									m_error_message = msg.substr(msg.find(" "));
 								}
 							}
 						}
 						else if(msg[0] == '1')
 						{
-							if(msg.substr(2,5) == "ERR")
+							if(msg.substr(2,3) == "ERR")
 							{
 								if(m_state == Communication::KILL_ACQUISITION)
 									m_state = Communication::OK;
@@ -444,6 +474,10 @@ void Communication::hardReset()
 	AutoMutex aLock(m_cond.mutex());
 	send("resetcam");
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 int Communication::threshold() const
 {
 	AutoMutex aLock(m_cond.mutex());
@@ -471,7 +505,7 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
 	if(gain == DEFAULT_GAIN)
 	{
 		char buffer[128];
-		snprintf(buffer,sizeof(buffer),"SetThreshold %d",value);
+		snprintf(buffer,sizeof(buffer),"setthreshold %d",value);
 		send(buffer);
 	}
 	else
@@ -480,7 +514,7 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
 		std::string &gainStr = i->second;
 
 		char buffer[128];
-		snprintf(buffer,sizeof(buffer),"SetThreshold %s %d",gainStr.c_str(),value);
+		snprintf(buffer,sizeof(buffer),"setthreshold %s %d",gainStr.c_str(),value);
 
 
 		send(buffer);
