@@ -3,15 +3,14 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>fr.soleil.lib.Lima</groupId>
-		<artifactId>Camera</artifactId>
-        <version>1.0.3-SNAPSHOT</version>
+        <artifactId>Camera</artifactId>
+        <version>1.0.4-SNAPSHOT</version>
     </parent>
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
-    <artifactId>Pilatus-${aol}-shared-${mode}</artifactId>
-
+    <artifactId>LimaPilatus-${aol}-shared-${mode}</artifactId>
     <packaging>nar</packaging>
-    <name>Pilatus</name>    <!-- use for the name of executable -->
+    <name>LimaPilatus</name>    <!-- use for the name of executable -->
     <description>This module controls the Pilatus Camera</description>
 
     <build>
