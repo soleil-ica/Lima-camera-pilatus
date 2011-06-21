@@ -12,10 +12,10 @@
 
 #define kPOST_MSG_TMO       2
 
-#define kTASK_PERIODIC_TIMEOUT_MS	1000
-const size_t  PILATUS_START_MSG		=	(yat::FIRST_USER_MSG + 300);
-const size_t  PILATUS_STOP_MSG		=	(yat::FIRST_USER_MSG + 301);
-const size_t  PILATUS_RESET_MSG		=	(yat::FIRST_USER_MSG + 302);
+#define kTASK_PERIODIC_TIMEOUT_MS    1000
+const size_t  PILATUS_START_MSG        =    (yat::FIRST_USER_MSG + 300);
+const size_t  PILATUS_STOP_MSG        =    (yat::FIRST_USER_MSG + 301);
+const size_t  PILATUS_RESET_MSG        =    (yat::FIRST_USER_MSG + 302);
 
 ///////////////////////////////////////////////////////////
 
@@ -51,16 +51,16 @@ namespace PilatusCpp
 
 class Reader : public yat::Task
 {
-	DEB_CLASS_NAMESPC(DebModCamera, "Reader", "Pilatus");
+    DEB_CLASS_NAMESPC(DebModCamera, "Reader", "Pilatus");
 
  public:
 
-	Reader(Communication& com, HwBufferCtrlObj& buffer_ctrl);
-	~Reader();
+    Reader(Communication& com, HwBufferCtrlObj& buffer_ctrl);
+    ~Reader();
 
     void start();
     void stop();
-	void reset();
+    void reset();
 
   //- [yat::Task implementation]
   protected: 
@@ -69,17 +69,17 @@ class Reader : public yat::Task
  private:
 
     //- Mutex
-	yat::Mutex 			lock_;
-	Communication&		m_com;
-	HwBufferCtrlObj& 	m_buffer;	
-	int 				m_image_number;
-	bool 				m_stop_already_done;
-	//@@TODO FOR TEST
-	gdshare::File 		my_file_image;
-	gdshare::String 	raw_data;
-	std::vector<gdshare::String> vData;
-	std::vector<gdshare::String> vLineData;
-	uint32_t* 			pImage;
+    yat::Mutex             lock_;
+    Communication&        m_com;
+    HwBufferCtrlObj&     m_buffer;    
+    int                 m_image_number;
+    bool                 m_stop_already_done;
+    //@@TODO FOR TEST
+    gdshare::File         my_file_image;
+    gdshare::String     raw_data;
+    std::vector<gdshare::String> vData;
+    std::vector<gdshare::String> vLineData;
+    uint32_t*             pImage;
 
 };
 } // namespace Pilatus
