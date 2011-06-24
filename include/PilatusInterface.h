@@ -112,7 +112,7 @@ class SyncCtrlObj : public HwSyncCtrlObj
 	DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Pilatus");
 
 public:
-	SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det);
+	SyncCtrlObj(Communication& com,DetInfoCtrlObj& det);
 	virtual ~SyncCtrlObj();
 
 	virtual bool checkTrigMode(TrigMode trig_mode);

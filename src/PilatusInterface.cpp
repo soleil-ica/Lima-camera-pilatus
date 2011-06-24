@@ -313,8 +313,8 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  * \brief SyncCtrlObj constructor
  *******************************************************************/
 
-SyncCtrlObj::SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det)
-			: HwSyncCtrlObj(buffer_ctrl), m_com(com), m_det(det)
+SyncCtrlObj::SyncCtrlObj(Communication& com, DetInfoCtrlObj& det)
+			: HwSyncCtrlObj(), m_com(com), m_det(det)
 {
 }
 
@@ -472,7 +472,7 @@ Interface::Interface(Communication& com)
 			: 	m_com(com),
 				m_det_info(com),
 				m_buffer(com,m_det_info ),
-				m_sync(com, m_buffer, m_det_info)
+				m_sync(com, m_det_info)
 {
 	DEB_CONSTRUCTOR();
 
