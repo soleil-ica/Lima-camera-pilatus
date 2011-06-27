@@ -296,7 +296,7 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  *******************************************************************/
 
 SyncCtrlObj::SyncCtrlObj(Communication& com, DetInfoCtrlObj& det)
-            : HwSyncCtrlObj(buffer_ctrl), m_com(com), m_det(det),m_latency(0.003)
+            : HwSyncCtrlObj(), m_com(com), m_det(det),m_latency(0.003)
 {
 }
 
@@ -464,17 +464,10 @@ void SyncCtrlObj:: prepareAcq()
  *******************************************************************/
 
 Interface::Interface(Communication& com)
-<<<<<<< HEAD
-            :   m_com(com),
-                m_det_info(com),
-                m_buffer(com,m_det_info ),
-                m_sync(com, m_buffer, m_det_info)
-=======
 			: 	m_com(com),
 				m_det_info(com),
 				m_buffer(com,m_det_info ),
 				m_sync(com, m_det_info)
->>>>>>> b2f689173b2559b6ec5a5b88c888c09d5aa8cf70
 {
     DEB_CONSTRUCTOR();
 
