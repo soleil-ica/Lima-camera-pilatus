@@ -144,16 +144,6 @@ void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
 void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 {
     DEB_MEMBER_FUNCT();
-
-    /*
-    Size image_size;
-    m_det.getMaxImageSize(image_size);
-    frame_dim.setSize(image_size);
-
-    ImageType image_type;
-    m_det.getDefImageType(image_type);
-    frame_dim.setImageType(image_type);
-    */
     m_buffer_ctrl_mgr.getFrameDim(frame_dim);//remove or not ??
 }
 
@@ -230,6 +220,7 @@ void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
     Size imageSize;
     m_det.getMaxImageSize(imageSize);
     max_nb_buffers = ( (Communication::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) ); //4 == image 32bits
+    m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
 }
 
 //-----------------------------------------------------
