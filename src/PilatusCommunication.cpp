@@ -284,35 +284,31 @@ void Communication::_run()
         {
             char messages[16384];
             int aMessageSize = recv(m_socket,messages,sizeof(messages),0);
-	    std::string strMessages(messages,aMessageSize );
+            std::string strMessages(messages,aMessageSize );
             if(!aMessageSize)
             {
-                DEB_TRACE() <<"-->no message received";
+                DEB_TRACE() <<"--> no message received";
                 close(m_socket);
                 m_socket = -1;
                 m_state = DISCONNECTED;
             }
             else
             {
-                DEB_TRACE() << "-->messages = "<<strMessages;
+                DEB_TRACE() << "--> messages = "<<strMessages;
                 std::vector<std::string> msg_vector;
                 _split(strMessages,"\x18",msg_vector); // '\x18' == '\030'
                 for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin(); msg_iterator != msg_vector.end();++msg_iterator)
                 {
                     std::string &msg = *msg_iterator;
-                    ////DEB_TRACE() << "-->messages rx : " << msg;
 
                     if(msg.substr(0,2) == "15") // generic response
                     {
-                        ////DEB_TRACE() << "-->15";
                         if(msg.substr(3,2) == "OK") // will check what the message is about
                         {
-                            ////DEB_TRACE() << "-->OK";
                             std::string real_message = msg.substr(6);
-                            ////DEB_TRACE() << "-->real_message : "<<real_message;
+
                             if(real_message.find("Settings:")!=std::string::npos) // Threshold and gain is already set,read them
                             {
-                                DEB_TRACE() << "-->Settings:";
                                 std::vector<std::string> threshold_vector;
                                 _split(msg.substr(17),";",threshold_vector);
                                 std::string &gain_string = threshold_vector[0];
@@ -321,7 +317,6 @@ void Communication::_run()
                                 _split(threshold_string," ",thr_val);
                                 std::string &threshold_value = thr_val[2];
                                 m_threshold = atoi(threshold_value.c_str());
-                                DEB_TRACE() << "-->m_threshold = "<<m_threshold;
 
                                 std::vector<std::string> gain_split;
                                 _split(gain_string," ",gain_split);
@@ -329,33 +324,27 @@ void Communication::_run()
                                 std::string &gain_value = gain_split[0];
                                 std::map<std::string,Gain>::iterator gFind = GAIN_SERVER_RESPONSE.find(gain_value);
                                 m_gain = gFind->second;
-                                DEB_TRACE() << "-->m_gain = "<<m_gain;
                             }
                             else if(real_message.find("/tmp/setthreshold")!=std::string::npos)
                             {
-                                DEB_TRACE() << "-->/tmp/setthreshold";
                                 m_state = Communication::OK;
                                 _reinit(); // resync with server
                             }
                             else if(real_message.find("Exposure")!=std::string::npos)
                             {
-                                DEB_TRACE() << "-->Exposure";
                                 int columnPos = real_message.find(":");
                                 int lastSpace = real_message.rfind(" ");
                                 if(real_message.substr(9,4) == "time")
                                 {
                                     m_exposure = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-                                    DEB_TRACE() << "-->time = "<<m_exposure;
                                 }
                                 else if(real_message.substr(9,6) == "period")
                                 {
                                     m_exposure_period = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-                                    DEB_TRACE() << "-->period = "<<m_exposure_period;
                                 }
                                 else // Exposures per frame
                                 {
                                     m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());\
-                                    DEB_TRACE() << "-->exposure_per_frame = "<<m_exposure_per_frame;
                                 }
 
                                 m_state = Communication::OK;
@@ -365,14 +354,12 @@ void Communication::_run()
                                 int columnPos = real_message.find(":");
                                 int lastSpace = real_message.rfind(" ");
                                 m_hardware_trigger_delay = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-                                DEB_TRACE() << "-->Delay = "<<m_hardware_trigger_delay;
                                 m_state = Communication::OK;
                             }
                             else if(real_message.find("N images")!=std::string::npos)
                             {
                                 int columnPos = real_message.find(":");
                                 m_nimages = atoi(real_message.substr(columnPos+1).c_str());
-                                DEB_TRACE() << "-->N images = "<<m_nimages;
                                 m_state = Communication::OK;
                             }
                             else if( m_state == Communication::SETTING_THRESHOLD)
@@ -384,12 +371,12 @@ void Communication::_run()
                             if(m_state == Communication::SETTING_THRESHOLD)
                             {
                                 m_state = Communication::OK;
-                                DEB_TRACE() << "Threshold setting failed";
+                                DEB_TRACE() << "==> Threshold setting failed";
                             }
                             else if(m_state == Communication::SETTING_EXPOSURE)
                             {
                                 m_state = Communication::OK;
-                                DEB_TRACE() << "Exposure setting failed";
+                                DEB_TRACE() << "==> Exposure setting failed";
                             }
                             else
                                 DEB_TRACE() << msg.substr(2);
@@ -398,25 +385,23 @@ void Communication::_run()
                     }
                     else if(msg.substr(0,2) == "13") //Acquisition Killed
                     {
-                        DEB_TRACE() << "==>Acquisition Killed";
+                        DEB_TRACE() << "==> Acquisition Killed";
                         m_state = Communication::OK;
                     }
                     else
                     {
                         if(msg[0] == '7')
                         {
-                            DEB_TRACE() << "==>7";
                             if(msg.substr(2,2) == "OK")
                             {
-								m_state = Communication::OK;
+                                m_state = Communication::OK;
                                 std::string real_message = msg.substr(5);
-                                DEB_TRACE() << "==>real_message : "<<real_message;
-/*
-    		    		if(real_message.find(m_imgpath)!=std::string::npos)
-                            	{
-				    m_state = Communication::STANDBY;
-			    	}
-*/
+                                /*
+                                if(real_message.find(m_imgpath)!=std::string::npos)
+                                {
+                                m_state = Communication::STANDBY;
+                                }
+                                */
                             }
                             else
                             {
@@ -432,7 +417,6 @@ void Communication::_run()
                         }
                         else if(msg[0] == '1')
                         {
-                            DEB_TRACE() << "==>1";
                             if(msg.substr(2,3) == "ERR")
                             {
                                 if(m_state == Communication::KILL_ACQUISITION)

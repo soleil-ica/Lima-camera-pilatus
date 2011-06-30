@@ -94,7 +94,7 @@ public:
     void sendAnyCommand(const std::string& message);    
 
     //s
-    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 8Go
+    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
     static const double             TIME_OUT = 10.;
  
     
