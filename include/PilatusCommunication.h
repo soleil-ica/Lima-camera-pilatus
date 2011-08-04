@@ -38,10 +38,10 @@ public:
 
     enum TriggerMode
     {
-        INTERNAL,
-        INTERNAL_TRIG_MULTI,
-        EXTERNAL_START,
-        EXTERNAL_MULTI_START,
+        INTERNAL_SINGLE,
+        INTERNAL_MULTI,
+        EXTERNAL_SINGLE,
+        EXTERNAL_MULTI,
         EXTERNAL_GATE
     };
 

@@ -330,13 +330,13 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
     Communication::TriggerMode trig;
     switch(trig_mode)
     {
-        case IntTrig        : trig = Communication::INTERNAL;
+        case IntTrig        : trig = Communication::INTERNAL_SINGLE;
         break;
-        case IntTrigMult    : trig = Communication::INTERNAL_TRIG_MULTI;
+        case IntTrigMult    : trig = Communication::INTERNAL_MULTI;
         break;
-        case ExtTrigSingle  : trig = Communication::EXTERNAL_START;
+        case ExtTrigSingle  : trig = Communication::EXTERNAL_SINGLE;
         break;
-        case ExtTrigMult    : trig = Communication::EXTERNAL_MULTI_START;
+        case ExtTrigMult    : trig = Communication::EXTERNAL_MULTI;
         break;
         case ExtGate        : trig = Communication::EXTERNAL_GATE;
         break;
@@ -354,15 +354,15 @@ void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
     Communication::TriggerMode trig = m_com.triggerMode();
     switch(trig)
     {
-        case Communication::INTERNAL                :   trig_mode = IntTrig;
+        case Communication::INTERNAL_SINGLE    :   trig_mode = IntTrig;
         break;
-        case Communication::INTERNAL_TRIG_MULTI     :   trig_mode = IntTrigMult;
+        case Communication::INTERNAL_MULTI     :   trig_mode = IntTrigMult;
         break;
-        case Communication::EXTERNAL_START          :   trig_mode = ExtTrigSingle;
+        case Communication::EXTERNAL_SINGLE    :   trig_mode = ExtTrigSingle;
         break;
-        case Communication::EXTERNAL_MULTI_START    :   trig_mode = ExtTrigMult;
+        case Communication::EXTERNAL_MULTI     :   trig_mode = ExtTrigMult;
         break;
-        case Communication::EXTERNAL_GATE           :   trig_mode = ExtGate;
+        case Communication::EXTERNAL_GATE      :   trig_mode = ExtGate;
         break;
     }
 }

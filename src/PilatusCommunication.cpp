@@ -49,9 +49,9 @@ using namespace lima::PilatusCpp;
 
 
 #define WAIT_UNTIL(testState,errmsg) while(m_state != testState)    \
-{                                                                      \
-  if(!m_cond.wait(TIME_OUT))                                          \
-    THROW_HW_ERROR(lima::Error) << errmsg;                              \
+{                                                                   \
+  if(!m_cond.wait(TIME_OUT))                                        \
+    THROW_HW_ERROR(lima::Error) << errmsg;                          \
 }
 
 //-----------------------------------------------------
@@ -303,6 +303,7 @@ void Communication::_run()
 
                     if(msg.substr(0,2) == "15") // generic response
                     {
+                        DEB_TRACE() << "[15]";
                         if(msg.substr(3,2) == "OK") // will check what the message is about
                         {
                             std::string real_message = msg.substr(6);
@@ -379,12 +380,16 @@ void Communication::_run()
                                 DEB_TRACE() << "==> Exposure setting failed";
                             }
                             else
+                            {
+                                DEB_TRACE() << "==> else";
                                 DEB_TRACE() << msg.substr(2);
+                            }
                         }
                         m_cond.broadcast();
                     }
                     else if(msg.substr(0,2) == "13") //Acquisition Killed
                     {
+                        DEB_TRACE() << "[13]";
                         DEB_TRACE() << "==> Acquisition Killed";
                         m_state = Communication::OK;
                     }
@@ -392,6 +397,7 @@ void Communication::_run()
                     {
                         if(msg[0] == '7')
                         {
+                            DEB_TRACE() << "[7]";
                             if(msg.substr(2,2) == "OK")
                             {
                                 m_state = Communication::OK;
@@ -406,7 +412,9 @@ void Communication::_run()
                             else
                             {
                                 if(m_state == Communication::KILL_ACQUISITION)
+                                {
                                     m_state = Communication::OK;
+                                }
                                 else
                                 {
                                     m_state = Communication::ERROR;
@@ -417,6 +425,7 @@ void Communication::_run()
                         }
                         else if(msg[0] == '1')
                         {
+                            DEB_TRACE() << "[1]";
                             if(msg.substr(2,3) == "ERR")
                             {
                                 if(m_state == Communication::KILL_ACQUISITION)
@@ -703,9 +712,9 @@ Communication::TriggerMode Communication::triggerMode() const
 //@brief set the trigger mode
 //
 //Trigger can be:
-// - Internal (Software) == INTERNAL
-// - External start == EXTERNAL_START
-// - External multi start == EXTERNAL_MULTI_START
+// - Internal (Software) == INTERNAL_SINGLE
+// - External start == EXTERNAL_SINGLE
+// - External multi start == EXTERNAL_MULTI
 // - External gate == EXTERNAL_GATE
 //-----------------------------------------------------
 void Communication::setTriggerMode(Communication::TriggerMode triggerMode)
@@ -742,12 +751,12 @@ void Communication::startAcquisition(int image_number)
 
     msg.clear();
     //Start Acquisition
-    if(m_trigger_mode == Communication::EXTERNAL_START)
+    if(m_trigger_mode == Communication::EXTERNAL_SINGLE)
     {
         msg << "exttrigger " << filename;
         send(msg.str());
     }
-    else if(m_trigger_mode == Communication::EXTERNAL_MULTI_START)
+    else if(m_trigger_mode == Communication::EXTERNAL_MULTI)
     {
         msg << "extmtrigger " << filename;
         send(msg.str());
@@ -763,7 +772,7 @@ void Communication::startAcquisition(int image_number)
         send(msg.str());
     }
 
-    if(m_trigger_mode != Communication::INTERNAL || m_trigger_mode != Communication::INTERNAL_TRIG_MULTI)
+    if(m_trigger_mode != Communication::INTERNAL_SINGLE || m_trigger_mode != Communication::INTERNAL_MULTI)
         m_cond.wait(TIME_OUT);
 
     m_state = Communication::RUNNING;
