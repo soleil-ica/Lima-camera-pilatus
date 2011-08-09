@@ -3,6 +3,10 @@
 
 #include "Debug.h"
 
+
+static const char  SOCKET_SEPARATOR = '\030';
+static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
+
 namespace lima
 {
 namespace PilatusCpp
@@ -24,7 +28,8 @@ public:
         SETTING_HARDWARE_TRIGGER_DELAY,
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
-        RUNNING
+        RUNNING,
+        STANDBY
     };
 
     enum Gain

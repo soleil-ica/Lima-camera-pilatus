@@ -48,7 +48,7 @@ using namespace lima::PilatusCpp;
 
 
 
-#define WAIT_UNTIL(testState,errmsg) while(m_state != testState)    \
+#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Communication::ERROR)    \
 {                                                                   \
   if(!m_cond.wait(TIME_OUT))                                        \
     THROW_HW_ERROR(lima::Error) << errmsg;                          \
@@ -186,7 +186,7 @@ void Communication::connect(const char *host,int port)
                     THROW_HW_ERROR(Error) << "Can't open connection";
                 }
                 write(m_pipes[1],"|",1);
-                m_state = Communication::OK;
+                m_state = Communication::STANDBY;
                 _resync();
             }
             else
@@ -227,10 +227,10 @@ void Communication::_reinit()
 void Communication::send(const std::string& message)
 {
     DEB_MEMBER_FUNCT();
-    DEB_PARAM() << DEB_VAR1(message);
 
     std::string msg = message;
-    msg+= '\030';
+    msg+= SOCKET_SEPARATOR;
+    DEB_TRACE() << ">> "<<msg;    
     write(m_socket,msg.c_str(),msg.size());
 }
 
@@ -243,18 +243,62 @@ void* Communication::_runFunc(void *commPt)
     return NULL;
 }
 
-//-----------------------------------------------------
-/*AU DEMARRAGE
-15 OK  Settings: mid gain; threshold: 6000 eV; vcmp: 0.679 V
+
+/******************************************************
+--> SUCCESS CASE (set number of images)
+ni 10
+15 OK N images set to: 10
+
+--> SUCCESS CASE (get path where images are saved)
+imgpath
+10 OK /home/det/p2_det/images/
+
+--> SUCCESS CASE (get path where images must be saved)
+imgpath /ramdisk/tmp/Arafat
+10 OK /ramdisk/tmp/Arafat/
+
+--> SUCCESS CASE (set exposure period)
+expp 0.2
+15 OK Exposure period set to: 0.2000000 sec
+
+--> SUCCESS CASE (set exposure time)
+expt 0.997
+15 OK Exposure time set to: 0.9970000 sec
+
+--> SUCCESS CASE (start acquisition)
+exposure toto_0001.cbf
+15 OK  Starting 0.1970000 second background: 2011-Aug-04T15:27:22.593
+7 OK /ramdisk/tmp/Arafat/toto_0300.cbf
+
+--> SUCCESS CASE (abort acquisition)
+exposure toto_0001.cbf
+15 OK  Starting 0.1970000 second background: 2011-Aug-04T15:33:03.178
+k
+13 ERR kill
+7 OK /ramdisk/tmp/Arafat/toto_0019.cbf
+
+--> SUCCESS CASE (get threshold)
+setthr
+15 OK  Settings: mid gain; threshold: 6300 eV; vcmp: 0.654 V
  Trim file:
-  /home/det/p2_det/config/calibration/p6m0106_E12000_T6000_vrf_m0p20.bin15 OK Exposure time set to: 0.1000000 sec.15 OK Exposure period set to: 0.103000 sec10 ERR mkdir() failed15 OK Delay time set to: 0.000000 sec.15 OK Exposures per frame set to: 115 OK
-*/
-/*AU SNAP
-15 OK Exposure time set to: 0.1000000 sec.eV; vcmp: 0.679 V
- Trim file:
-  /home/det/p2_det/config/calibration/p6m0106_E12000_T6000_vrf_m0p20.bin15 OK Exposure time set to: 0.1000000 sec.15 OK Exposure period set to: 0.103000 sec10 ERR mkdir() failed15 OK Delay time set to: 0.000000 sec.15 OK Exposures per frame set to: 115 OK
-*/
-//-----------------------------------------------------
+  /home/det/p2_det/config/calibration/p6m0106_E12600_T6300_vrf_m0p20.bin
+ 
+--> SUCCESS CASE (set threshold to 6000)
+setthr 6000
+15 OK /tmp/setthreshold.cmd
+
+--> ERROR CASE (send a bad command)
+threshold
+1 ERR *** Unrecognized command: threshold
+
+--> ERROR CASE (bad parameters)
+setthr low 5000
+15 ERR ERROR: unknown gain setting: low 5000
+
+TO DO :
+1 - manage state for threshold
+2 - resync() after threshold -> need manage state
+******************************************************/
 void Communication::_run()
 {
     DEB_MEMBER_FUNCT();
@@ -287,29 +331,28 @@ void Communication::_run()
             std::string strMessages(messages,aMessageSize );
             if(!aMessageSize)
             {
-                DEB_TRACE() <<"--> no message received";
+                DEB_TRACE() <<"-- no message received";
                 close(m_socket);
                 m_socket = -1;
                 m_state = DISCONNECTED;
             }
             else
             {
-                DEB_TRACE() << "--> messages = "<<strMessages;
+                DEB_TRACE() << "<< messages = "<<strMessages;
                 std::vector<std::string> msg_vector;
-                _split(strMessages,"\x18",msg_vector); // '\x18' == '\030'
+                _split(strMessages,SPLIT_SEPARATOR,msg_vector);
                 for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin(); msg_iterator != msg_vector.end();++msg_iterator)
                 {
                     std::string &msg = *msg_iterator;
 
                     if(msg.substr(0,2) == "15") // generic response
                     {
-                        DEB_TRACE() << "[15]";
                         if(msg.substr(3,2) == "OK") // will check what the message is about
-                        {
+                        {                            
                             std::string real_message = msg.substr(6);
 
                             if(real_message.find("Settings:")!=std::string::npos) // Threshold and gain is already set,read them
-                            {
+                            {                                
                                 std::vector<std::string> threshold_vector;
                                 _split(msg.substr(17),";",threshold_vector);
                                 std::string &gain_string = threshold_vector[0];
@@ -325,11 +368,13 @@ void Communication::_run()
                                 std::string &gain_value = gain_split[0];
                                 std::map<std::string,Gain>::iterator gFind = GAIN_SERVER_RESPONSE.find(gain_value);
                                 m_gain = gFind->second;
+                                m_state = Communication::STANDBY;                               
                             }
                             else if(real_message.find("/tmp/setthreshold")!=std::string::npos)
                             {
-                                m_state = Communication::OK;
-                                _reinit(); // resync with server
+                                DEB_TRACE() << "-- Threshold process succeeded]";
+                                m_state = Communication::STANDBY;
+                                /////@@@@ to do later _reinit(); // resync with server
                             }
                             else if(real_message.find("Exposure")!=std::string::npos)
                             {
@@ -347,41 +392,44 @@ void Communication::_run()
                                 {
                                     m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());\
                                 }
-
-                                m_state = Communication::OK;
+                                if(m_state!=Communication::SETTING_EXPOSURE)
+                                  m_state = Communication::STANDBY;
                             }
                             else if(real_message.find("Delay")!=std::string::npos)
                             {
                                 int columnPos = real_message.find(":");
                                 int lastSpace = real_message.rfind(" ");
                                 m_hardware_trigger_delay = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-                                m_state = Communication::OK;
+                                if(m_state!=Communication::SETTING_EXPOSURE)
+                                  m_state = Communication::STANDBY;
                             }
                             else if(real_message.find("N images")!=std::string::npos)
                             {
                                 int columnPos = real_message.find(":");
                                 m_nimages = atoi(real_message.substr(columnPos+1).c_str());
-                                m_state = Communication::OK;
+                                if(m_state!=Communication::SETTING_EXPOSURE)
+                                  m_state = Communication::STANDBY;
                             }
-                            else if( m_state == Communication::SETTING_THRESHOLD)
-                                m_state = Communication::OK;
-
+                            
+                            if(m_state = Communication::SETTING_THRESHOLD) 
+                              m_state = Communication::STANDBY;                           
                         }
                         else  // ERROR MESSAGE
                         {
                             if(m_state == Communication::SETTING_THRESHOLD)
                             {
-                                m_state = Communication::OK;
-                                DEB_TRACE() << "==> Threshold setting failed";
+                                m_state = Communication::ERROR;
+                                DEB_TRACE() << "-- Threshold process failed";
                             }
                             else if(m_state == Communication::SETTING_EXPOSURE)
                             {
-                                m_state = Communication::OK;
-                                DEB_TRACE() << "==> Exposure setting failed";
+                                m_state = Communication::ERROR;
+                                DEB_TRACE() << "-- Exposure setting failed";
                             }
                             else
                             {
-                                DEB_TRACE() << "==> else";
+                                m_state = Communication::ERROR;                                
+                                DEB_TRACE() << "-- ERROR";
                                 DEB_TRACE() << msg.substr(2);
                             }
                         }
@@ -389,56 +437,50 @@ void Communication::_run()
                     }
                     else if(msg.substr(0,2) == "13") //Acquisition Killed
                     {
-                        DEB_TRACE() << "[13]";
-                        DEB_TRACE() << "==> Acquisition Killed";
-                        m_state = Communication::OK;
+                        DEB_TRACE() << "-- Acquisition Killed"; 
+                        m_state = Communication::STANDBY;
                     }
-                    else
+                    else if(msg.substr(0,2) == "7 ")
                     {
-                        if(msg[0] == '7')
+                        if(msg.substr(2,2) == "OK")
                         {
-                            DEB_TRACE() << "[7]";
-                            if(msg.substr(2,2) == "OK")
-                            {
-                                m_state = Communication::OK;
-                                std::string real_message = msg.substr(5);
-                                /*
-                                if(real_message.find(m_imgpath)!=std::string::npos)
-                                {
-                                m_state = Communication::STANDBY;
-                                }
-                                */
-                            }
-                            else
-                            {
-                                if(m_state == Communication::KILL_ACQUISITION)
-                                {
-                                    m_state = Communication::OK;
-                                }
-                                else
-                                {
-                                    m_state = Communication::ERROR;
-                                    msg = msg.substr(2);
-                                    m_error_message = msg.substr(msg.find(" "));
-                                }
-                            }
+                            DEB_TRACE() << "-- Exposure succeeded";                      
+                            m_state = Communication::STANDBY;
+                            std::string real_message = msg.substr(5);
                         }
-                        else if(msg[0] == '1')
+                        else
                         {
-                            DEB_TRACE() << "[1]";
-                            if(msg.substr(2,3) == "ERR")
-                            {
-                                if(m_state == Communication::KILL_ACQUISITION)
-                                {
-                                    m_state = Communication::OK;
-                                }
-                                else
-                                {
-                                    m_error_message = msg.substr(6);
-                                    m_state = Communication::ERROR;
-                                }
-                            }
+                            DEB_TRACE() << "-- ERROR";                      
+                            m_state = Communication::ERROR;
+                            msg = msg.substr(2);
+                            m_error_message = msg.substr(msg.find(" "));
                         }
+                    }
+                    else if(msg.substr(0,2) == "1 ")
+                    {
+                        if(msg.substr(2,3) == "ERR")
+                        {
+                            DEB_TRACE() << "-- ERROR";
+                            m_error_message = msg.substr(6);
+                            DEB_TRACE() << m_error_message;
+                            m_state = Communication::ERROR;
+                        }
+                    }
+                    else if(msg.substr(0,2) == "10")
+                    {
+                        if(msg.substr(3,2) == "OK")
+                        {
+                            DEB_TRACE() << "-- imgpath setting succeeded";
+                            m_state = Communication::STANDBY;
+                        }
+                        else
+                        {
+                            DEB_TRACE() << "-- ERROR";
+                            m_state = Communication::ERROR;
+                            msg = msg.substr(2);
+                            m_error_message = msg.substr(msg.find(" "));
+                            DEB_TRACE() << m_error_message;
+                        }                        
                     }
                 }
             }
@@ -453,7 +495,7 @@ void Communication::setImgpath(const std::string& path)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set imgpath, server not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set imgpath, server not idle");
     m_imgpath = path;    
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;
@@ -515,7 +557,7 @@ void Communication::softReset()
 {
     AutoMutex aLock(m_cond.mutex());
     m_error_message.clear();
-    m_state = Communication::OK;
+    m_state = Communication::STANDBY;
 }
 
 //-----------------------------------------------------
@@ -553,7 +595,7 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set threshold, server is not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set threshold, server is not idle");
     if(gain == DEFAULT_GAIN)
     {
         char buffer[128];
@@ -571,6 +613,7 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
         send(buffer);
         m_state = Communication::SETTING_THRESHOLD;
     }
+
 
     if (m_gap_fill)
         send("gapfill -1");
@@ -597,7 +640,7 @@ void Communication::setExposure(double val)
     if(m_trigger_mode == Communication::EXTERNAL_GATE and val <= 0)
         return;
 
-    WAIT_UNTIL(Communication::OK,"Could not set exposure, server is not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure, server is not idle");
     m_state = Communication::SETTING_EXPOSURE;
     std::stringstream msg;
     msg << "exptime " << val;
@@ -621,7 +664,7 @@ void Communication::setExposurePeriod(double val)
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set exposure period, server not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure period, server not idle");
     m_state = Communication::SETTING_EXPOSURE_PERIOD;
     std::stringstream msg;
     msg << "expperiod " << val;
@@ -644,7 +687,7 @@ void Communication::setNbImagesInSequence(int nb)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set number image in sequence, server not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set number image in sequence, server not idle");
     m_state = Communication::SETTING_NB_IMAGE_IN_SEQUENCE;
     std::stringstream msg;
     msg << "nimages " << nb;
@@ -668,7 +711,7 @@ void Communication::setHardwareTriggerDelay(double value)
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set hardware trigger delay, server not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set hardware trigger delay, server not idle");
     m_state = Communication::SETTING_HARDWARE_TRIGGER_DELAY;
     std::stringstream msg;
     msg << "delay " << value;
@@ -692,7 +735,7 @@ void Communication::setNbExposurePerFrame(int val)
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not set exposure per frame, server not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure per frame, server not idle");
     m_state = Communication::SETTING_EXPOSURE_PER_FRAME;
     std::stringstream msg;
     msg << "nexpframe " << val;
@@ -751,6 +794,7 @@ void Communication::startAcquisition(int image_number)
 
     msg.clear();
     //Start Acquisition
+    WAIT_UNTIL(Communication::STANDBY,"Could not start Acauisition, server not idle");    
     if(m_trigger_mode == Communication::EXTERNAL_SINGLE)
     {
         msg << "exttrigger " << filename;
@@ -820,7 +864,7 @@ void Communication::sendAnyCommand(const std::string& message)
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::OK,"Could not send the Command, server is not idle");
+    WAIT_UNTIL(Communication::STANDBY,"Could not send the Command, server is not idle");
 
     send(message);
 }

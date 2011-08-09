@@ -436,9 +436,7 @@ void SyncCtrlObj:: prepareAcq()
 {
 
     double exposure =  m_exposure_requested;
-    double latency = 0.003;
-    getLatTime(latency);
-    double exposure_period = exposure + latency;
+    double exposure_period = exposure + m_latency;
 
     m_com.setExposurePeriod(exposure_period);
 
@@ -553,33 +551,25 @@ void Interface::stopAcq()
 void Interface::getStatus(StatusType& status)
 {
 
-    Communication::Status com_status = Communication::OK;
+    Communication::Status com_status = Communication::STANDBY;
     com_status = m_com.status();
-    if(com_status == Communication::ERROR)
+
+    if(com_status == Communication::STANDBY)
+    {
+        status.det = DetIdle;
+        status.acq = AcqReady;
+    }
+    else if(com_status == Communication::ERROR)
     {
         status.det = DetFault;
         status.acq = AcqFault;
     }
     else
     {
-        if(com_status != Communication::OK)
-        {
-            status.det = DetExposure;
-            status.acq = AcqRunning;
-        }
-        else
-        {
-            status.det = DetIdle;
-            int lastAcquiredFrame = -1;//self.__buffer.getLastAcquiredFrame()
-            int requestNbFrame = -1;
-            m_sync.getNbHwFrames(requestNbFrame);
-            if(/*flag_start &&*/lastAcquiredFrame >= 0 && lastAcquiredFrame == (requestNbFrame - 1))
-                status.acq = AcqReady;
-            else
-                status.acq = AcqRunning;
-        }
-    }
-    status.det_mask = DetExposure|DetFault;
+        status.det = DetExposure;
+        status.acq = AcqRunning;       
+    }    
+    status.det_mask = DetExposure | DetReadout | DetLatency;
 
 }
 
@@ -589,8 +579,9 @@ void Interface::getStatus(StatusType& status)
 int Interface::getNbHwAcquiredFrames()
 {
     DEB_MEMBER_FUNCT();
-    int acq_frames = 1;
+    int acq_frames = 0;
     //self.__buffer.getLastAcquiredFrame() + 1
+    //return acq_frames;
     return acq_frames;
 }
 
