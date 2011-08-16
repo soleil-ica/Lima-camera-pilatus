@@ -144,16 +144,6 @@ void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
 void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 {
     DEB_MEMBER_FUNCT();
-
-    /*
-    Size image_size;
-    m_det.getMaxImageSize(image_size);
-    frame_dim.setSize(image_size);
-
-    ImageType image_type;
-    m_det.getDefImageType(image_type);
-    frame_dim.setImageType(image_type);
-    */
     m_buffer_ctrl_mgr.getFrameDim(frame_dim);//remove or not ??
 }
 
@@ -230,6 +220,7 @@ void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
     Size imageSize;
     m_det.getMaxImageSize(imageSize);
     max_nb_buffers = ( (Communication::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) ); //4 == image 32bits
+    m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
 }
 
 //-----------------------------------------------------
@@ -339,13 +330,13 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
     Communication::TriggerMode trig;
     switch(trig_mode)
     {
-        case IntTrig        : trig = Communication::INTERNAL;
+        case IntTrig        : trig = Communication::INTERNAL_SINGLE;
         break;
-        case IntTrigMult    : trig = Communication::INTERNAL_TRIG_MULTI;
+        case IntTrigMult    : trig = Communication::INTERNAL_MULTI;
         break;
-        case ExtTrigSingle  : trig = Communication::EXTERNAL_START;
+        case ExtTrigSingle  : trig = Communication::EXTERNAL_SINGLE;
         break;
-        case ExtTrigMult    : trig = Communication::EXTERNAL_MULTI_START;
+        case ExtTrigMult    : trig = Communication::EXTERNAL_MULTI;
         break;
         case ExtGate        : trig = Communication::EXTERNAL_GATE;
         break;
@@ -363,15 +354,15 @@ void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
     Communication::TriggerMode trig = m_com.triggerMode();
     switch(trig)
     {
-        case Communication::INTERNAL                :   trig_mode = IntTrig;
+        case Communication::INTERNAL_SINGLE    :   trig_mode = IntTrig;
         break;
-        case Communication::INTERNAL_TRIG_MULTI     :   trig_mode = IntTrigMult;
+        case Communication::INTERNAL_MULTI     :   trig_mode = IntTrigMult;
         break;
-        case Communication::EXTERNAL_START          :   trig_mode = ExtTrigSingle;
+        case Communication::EXTERNAL_SINGLE    :   trig_mode = ExtTrigSingle;
         break;
-        case Communication::EXTERNAL_MULTI_START    :   trig_mode = ExtTrigMult;
+        case Communication::EXTERNAL_MULTI     :   trig_mode = ExtTrigMult;
         break;
-        case Communication::EXTERNAL_GATE           :   trig_mode = ExtGate;
+        case Communication::EXTERNAL_GATE      :   trig_mode = ExtGate;
         break;
     }
 }
@@ -445,9 +436,7 @@ void SyncCtrlObj:: prepareAcq()
 {
 
     double exposure =  m_exposure_requested;
-    double latency = 0.003;
-    getLatTime(latency);
-    double exposure_period = exposure + latency;
+    double exposure_period = exposure + m_latency;
 
     m_com.setExposurePeriod(exposure_period);
 
@@ -562,33 +551,25 @@ void Interface::stopAcq()
 void Interface::getStatus(StatusType& status)
 {
 
-    Communication::Status com_status = Communication::OK;
+    Communication::Status com_status = Communication::STANDBY;
     com_status = m_com.status();
-    if(com_status == Communication::ERROR)
+
+    if(com_status == Communication::STANDBY)
+    {
+        status.det = DetIdle;
+        status.acq = AcqReady;
+    }
+    else if(com_status == Communication::ERROR)
     {
         status.det = DetFault;
         status.acq = AcqFault;
     }
     else
     {
-        if(com_status != Communication::OK)
-        {
-            status.det = DetExposure;
-            status.acq = AcqRunning;
-        }
-        else
-        {
-            status.det = DetIdle;
-            int lastAcquiredFrame = -1;//self.__buffer.getLastAcquiredFrame()
-            int requestNbFrame = -1;
-            m_sync.getNbHwFrames(requestNbFrame);
-            if(/*flag_start &&*/lastAcquiredFrame >= 0 && lastAcquiredFrame == (requestNbFrame - 1))
-                status.acq = AcqReady;
-            else
-                status.acq = AcqRunning;
-        }
-    }
-    status.det_mask = DetExposure|DetFault;
+        status.det = DetExposure;
+        status.acq = AcqRunning;       
+    }    
+    status.det_mask = DetExposure | DetReadout | DetLatency;
 
 }
 
@@ -598,8 +579,9 @@ void Interface::getStatus(StatusType& status)
 int Interface::getNbHwAcquiredFrames()
 {
     DEB_MEMBER_FUNCT();
-    int acq_frames = 1;
+    int acq_frames = 0;
     //self.__buffer.getLastAcquiredFrame() + 1
+    //return acq_frames;
     return acq_frames;
 }
 

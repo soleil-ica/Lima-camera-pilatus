@@ -3,6 +3,10 @@
 
 #include "Debug.h"
 
+
+static const char  SOCKET_SEPARATOR = '\030';
+static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
+
 namespace lima
 {
 namespace PilatusCpp
@@ -24,7 +28,8 @@ public:
         SETTING_HARDWARE_TRIGGER_DELAY,
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
-        RUNNING
+        RUNNING,
+        STANDBY
     };
 
     enum Gain
@@ -38,10 +43,10 @@ public:
 
     enum TriggerMode
     {
-        INTERNAL,
-        INTERNAL_TRIG_MULTI,
-        EXTERNAL_START,
-        EXTERNAL_MULTI_START,
+        INTERNAL_SINGLE,
+        INTERNAL_MULTI,
+        EXTERNAL_SINGLE,
+        EXTERNAL_MULTI,
         EXTERNAL_GATE
     };
 
@@ -94,7 +99,7 @@ public:
     void sendAnyCommand(const std::string& message);    
 
     //s
-    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 8Go
+    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
     static const double             TIME_OUT = 10.;
  
     
