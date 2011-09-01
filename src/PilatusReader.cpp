@@ -13,8 +13,8 @@
 //---------------------------
 //- Ctor
 //---------------------------
-Reader::Reader(Camera& com, HwBufferCtrlObj& buffer_ctrl)
-      : m_com(com),
+Reader::Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl)
+      : m_cam(cam),
         m_buffer(buffer_ctrl),
         m_stop_already_done(true),
         m_image_size(PILATUS_6M_WIDTH,PILATUS_6M_HEIGHT),
@@ -74,7 +74,7 @@ void Reader::start()
             delete m_dw;
             m_dw = 0;
         }
-        m_dw = new gdshare::DirectoryWatcher(m_com.imgpath());
+        m_dw = new gdshare::DirectoryWatcher(m_cam.imgpath());
         this->post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
     }
     catch (Exception &e)
@@ -198,7 +198,7 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
                     continueAcq = buffer_mgr.newFrameReady(frame_info);
 
                     // if nb acquired image < requested frames
-                    if (continueAcq && (!m_com.nbImagesInSequence()||m_image_number<(m_com.nbImagesInSequence()-1)))
+                    if (continueAcq && (!m_cam.nbImagesInSequence()||m_image_number<(m_cam.nbImagesInSequence()-1)))
                     {
                         yat::MutexLock scoped_lock(contextual_lock_);
                         {

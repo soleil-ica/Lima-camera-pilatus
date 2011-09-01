@@ -9,8 +9,8 @@
 /*******************************************************************
  * \brief DetInfoCtrlObj constructor
  *******************************************************************/
-DetInfoCtrlObj::DetInfoCtrlObj(Camera& com)
-                :m_com(com)
+DetInfoCtrlObj::DetInfoCtrlObj(Camera& cam)
+                :m_cam(cam)
 {
     DEB_CONSTRUCTOR();
 }
@@ -106,15 +106,15 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
  * \brief BufferCtrlObj constructor
  *******************************************************************/
 
-BufferCtrlObj::BufferCtrlObj(Camera& com, DetInfoCtrlObj& det)
+BufferCtrlObj::BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det)
                 :
                     m_buffer_cb_mgr(m_buffer_alloc_mgr),
                     m_buffer_ctrl_mgr(m_buffer_cb_mgr),
-                    m_com(com),
+                    m_cam(cam),
                     m_det(det)
 {
     DEB_CONSTRUCTOR();
-    m_reader = new Reader(com,*this);
+    m_reader = new Reader(cam,*this);
     m_reader->go(2000);
 }
 
@@ -295,8 +295,9 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  * \brief SyncCtrlObj constructor
  *******************************************************************/
 
-SyncCtrlObj::SyncCtrlObj(Camera& com)
-            :  m_com(com),m_latency(LATENCY_DEFAULT_VALUE)
+SyncCtrlObj::SyncCtrlObj(Camera& cam)
+            :  m_cam(cam),m_latency(LATENCY_DEFAULT_VALUE)
+
 {
 }
 
@@ -351,7 +352,7 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
         break;
     }
 
-    m_com.setTriggerMode(trig);
+    m_cam.setTriggerMode(trig);
 
 }
 
@@ -360,7 +361,7 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 {
-    Camera::TriggerMode trig = m_com.triggerMode();
+    Camera::TriggerMode trig = m_cam.triggerMode();
     switch(trig)
     {
         case Camera::INTERNAL_SINGLE    :   trig_mode = IntTrig;
@@ -382,7 +383,7 @@ void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 void SyncCtrlObj::setExpTime(double exp_time)
 {
     m_exposure_requested = exp_time;
-    m_com.setExposure(exp_time);
+    m_cam.setExposure(exp_time);
 }
 
 //-----------------------------------------------------
@@ -390,7 +391,7 @@ void SyncCtrlObj::setExpTime(double exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::getExpTime(double& exp_time)
 {
-    exp_time = m_com.exposure();
+    exp_time = m_cam.exposure();
 }
 
 //-----------------------------------------------------
@@ -447,12 +448,12 @@ void SyncCtrlObj:: prepareAcq()
     double exposure =  m_exposure_requested;
     double exposure_period = exposure + m_latency;
 
-    m_com.setExposurePeriod(exposure_period);
+    m_cam.setExposurePeriod(exposure_period);
 
     TrigMode trig_mode;
     getTrigMode(trig_mode);
     int nb_frames = (trig_mode == IntTrigMult)?1:m_nb_frames;
-    m_com.setNbImagesInSequence(nb_frames);
+    m_cam.setNbImagesInSequence(nb_frames);
 
 }
 
@@ -461,11 +462,11 @@ void SyncCtrlObj:: prepareAcq()
  * \brief Hw Interface constructor
  *******************************************************************/
 
-Interface::Interface(Camera& com)
-            :   m_com(com),
-                m_det_info(com),
-                m_buffer(com,m_det_info ),
-                m_sync(com)
+Interface::Interface(Camera& cam)
+            :   m_cam(cam),
+                m_det_info(cam),
+                m_buffer(cam,m_det_info ),
+                m_sync(cam)
 {
     DEB_CONSTRUCTOR();
 
@@ -526,9 +527,9 @@ void Interface::prepareAcq()
     DEB_MEMBER_FUNCT();
 
     Camera::Status com_status = Camera::OK;
-    com_status = m_com.status();
+    com_status = m_cam.status();
     if (com_status == Camera::DISCONNECTED)
-        m_com.connect(m_com.serverIP().c_str(),m_com.serverPort());
+        m_cam.connect(m_cam.serverIP().c_str(),m_cam.serverPort());
     m_buffer.reset();
     m_sync.prepareAcq();
 
@@ -540,7 +541,7 @@ void Interface::prepareAcq()
 void Interface::startAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_com.startAcquisition();
+    m_cam.startAcquisition();
     m_buffer.start();
 }
 
@@ -550,7 +551,7 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_com.stopAcquisition();
+    m_cam.stopAcquisition();
     m_buffer.stop();
 }
 
@@ -562,7 +563,7 @@ void Interface::getStatus(StatusType& status)
 
     DEB_MEMBER_FUNCT();
     Camera::Status com_status = Camera::STANDBY;
-    com_status = m_com.status();
+    com_status = m_cam.status();
 
     if(com_status == Camera::STANDBY)
     {
@@ -623,7 +624,7 @@ double Interface::getLatency(void)
 //-----------------------------------------------------
 void Interface::setImagePath(const std::string& path)
 {
-    m_com.setImgpath(path);
+    m_cam.setImgpath(path);
 }
 
 //-----------------------------------------------------
@@ -631,7 +632,7 @@ void Interface::setImagePath(const std::string& path)
 //-----------------------------------------------------
 const std::string& Interface::getImagePath(void)
 {
-    return m_com.imgpath();
+    return m_cam.imgpath();
 }
 
 //-----------------------------------------------------
@@ -639,7 +640,7 @@ const std::string& Interface::getImagePath(void)
 //-----------------------------------------------------
 void Interface::setFileName(const std::string& name)
 {
-     m_com.setFileName(name);
+     m_cam.setFileName(name);
 }
 
 //-----------------------------------------------------
@@ -647,7 +648,7 @@ void Interface::setFileName(const std::string& name)
 //-----------------------------------------------------
 const std::string& Interface::getFileName(void)
 {
-    return  m_com.fileName();
+    return  m_cam.fileName();
 }
     
     
@@ -658,7 +659,7 @@ void Interface::setMxSettings(const std::string& str)
 {
     std::string str_to_send ="mxsettings ";
     str_to_send+=str;
-    m_com.sendAnyCommand(str_to_send);
+    m_cam.sendAnyCommand(str_to_send);
 }
 
 //-----------------------------------------------------
@@ -666,7 +667,7 @@ void Interface::setMxSettings(const std::string& str)
 //-----------------------------------------------------
 void Interface::setThresholdGain(int threshold, Camera::Gain gain)
 {
-    m_com.setThresholdGain(threshold, gain);
+    m_cam.setThresholdGain(threshold, gain);
 }
 
 //-----------------------------------------------------
@@ -674,7 +675,7 @@ void Interface::setThresholdGain(int threshold, Camera::Gain gain)
 //-----------------------------------------------------
 int Interface::getThreshold(void)
 {
-    return m_com.threshold();
+    return m_cam.threshold();
 }
 
 
@@ -683,12 +684,12 @@ int Interface::getThreshold(void)
 //-----------------------------------------------------
 Camera::Gain Interface::getGain(void)
 {
-    return m_com.gain();
+    return m_cam.gain();
 }
 
 //-----------------------------------------------------
 void Interface::sendAnyCommand(const std::string& str)
 {
-    m_com.sendAnyCommand(str);
+    m_cam.sendAnyCommand(str);
 }
 //-----------------------------------------------------

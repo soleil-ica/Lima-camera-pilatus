@@ -32,7 +32,7 @@ class DetInfoCtrlObj : public HwDetInfoCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "DetInfoCtrlObj", "Pilatus");
 
 public:
-    DetInfoCtrlObj(Camera& com);
+    DetInfoCtrlObj(Camera& cam);
     virtual ~DetInfoCtrlObj();
 
     virtual void getMaxImageSize(Size& max_image_size);
@@ -50,7 +50,7 @@ public:
     virtual void unregisterMaxImageSizeCallback(HwMaxImageSizeCallback& cb){;};
 
 private:
-    Camera& m_com;
+    Camera& m_cam;
 };
 
 
@@ -64,7 +64,7 @@ class BufferCtrlObj : public HwBufferCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "BufferCtrlObj", "Pilatus");
 
 public:
-    BufferCtrlObj(Camera& com, DetInfoCtrlObj& det);
+    BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det);
     virtual ~BufferCtrlObj();
 
     void start();
@@ -99,7 +99,7 @@ private:
     SoftBufferAllocMgr      m_buffer_alloc_mgr;
     StdBufferCbMgr          m_buffer_cb_mgr;
     BufferCtrlMgr           m_buffer_ctrl_mgr;
-    Camera&          m_com;
+    Camera&          m_cam;
     DetInfoCtrlObj&         m_det;
     Reader*                 m_reader;
 };
@@ -114,7 +114,8 @@ class SyncCtrlObj : public HwSyncCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Pilatus");
 
 public:
-    SyncCtrlObj(Camera& com);
+
+    SyncCtrlObj(Camera& cam);
     virtual ~SyncCtrlObj();
 
     virtual bool checkTrigMode(TrigMode trig_mode);
@@ -135,7 +136,7 @@ public:
     void prepareAcq();
 
 private:
-    Camera&      m_com;
+    Camera&      m_cam;
     int                 m_nb_frames ;
     double              m_exposure_requested;
     double              m_latency;
@@ -152,7 +153,7 @@ class Interface : public HwInterface
     DEB_CLASS_NAMESPC(DebModCamera, "PilatusInterface", "Pilatus");
 
 public:
-    Interface(Camera& com);
+    Interface(Camera& cam);
     virtual         ~Interface();
 
     //- From HwInterface
@@ -181,7 +182,7 @@ public:
     void                 sendAnyCommand(const std::string& str);
 
 private:
-    Camera&        m_com;
+    Camera&        m_cam;
     CapList             m_cap_list;
     DetInfoCtrlObj        m_det_info;
     BufferCtrlObj        m_buffer;
