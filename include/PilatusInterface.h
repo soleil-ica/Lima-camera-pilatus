@@ -5,12 +5,16 @@
 #include "HwBufferMgr.h"
 #include "Debug.h"
 #include "Data.h"
-#include "PilatusCommunication.h"
+#include "PilatusCamera.h"
 #include "PilatusReader.h"
 
 using namespace lima;
 using namespace lima::PilatusCpp;
 using namespace std;
+
+#define LATENCY_DEFAULT_VALUE          0.003
+#define PILATUS_6M_WIDTH                2463
+#define PILATUS_6M_HEIGHT               2527
 
 namespace lima
 {
@@ -28,7 +32,7 @@ class DetInfoCtrlObj : public HwDetInfoCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "DetInfoCtrlObj", "Pilatus");
 
 public:
-    DetInfoCtrlObj(Communication& com);
+    DetInfoCtrlObj(Camera& com);
     virtual ~DetInfoCtrlObj();
 
     virtual void getMaxImageSize(Size& max_image_size);
@@ -46,7 +50,7 @@ public:
     virtual void unregisterMaxImageSizeCallback(HwMaxImageSizeCallback& cb){;};
 
 private:
-    Communication& m_com;
+    Camera& m_com;
 };
 
 
@@ -60,7 +64,7 @@ class BufferCtrlObj : public HwBufferCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "BufferCtrlObj", "Pilatus");
 
 public:
-    BufferCtrlObj(Communication& com, DetInfoCtrlObj& det);
+    BufferCtrlObj(Camera& com, DetInfoCtrlObj& det);
     virtual ~BufferCtrlObj();
 
     void start();
@@ -84,8 +88,9 @@ public:
     virtual void getFrameInfo(int acq_frame_nb, HwFrameInfoType& info);
 
     // -- Buffer control bject
-    BufferCtrlMgr&         getBufferMgr(){return m_buffer_ctrl_mgr;};
+    BufferCtrlMgr&      getBufferMgr(){return m_buffer_ctrl_mgr;};
     StdBufferCbMgr&     getBufferCbMgr(){return m_buffer_cb_mgr;};
+    int                 getLastAcquiredFrame();
     
     virtual void registerFrameCallback(HwFrameCallback& frame_cb);
     virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
@@ -94,7 +99,7 @@ private:
     SoftBufferAllocMgr      m_buffer_alloc_mgr;
     StdBufferCbMgr          m_buffer_cb_mgr;
     BufferCtrlMgr           m_buffer_ctrl_mgr;
-    Communication&          m_com;
+    Camera&          m_com;
     DetInfoCtrlObj&         m_det;
     Reader*                 m_reader;
 };
@@ -109,7 +114,7 @@ class SyncCtrlObj : public HwSyncCtrlObj
     DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Pilatus");
 
 public:
-    SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det);
+    SyncCtrlObj(Camera& com);
     virtual ~SyncCtrlObj();
 
     virtual bool checkTrigMode(TrigMode trig_mode);
@@ -130,8 +135,7 @@ public:
     void prepareAcq();
 
 private:
-    Communication&      m_com;
-    DetInfoCtrlObj&     m_det;
+    Camera&      m_com;
     int                 m_nb_frames ;
     double              m_exposure_requested;
     double              m_latency;
@@ -148,7 +152,7 @@ class Interface : public HwInterface
     DEB_CLASS_NAMESPC(DebModCamera, "PilatusInterface", "Pilatus");
 
 public:
-    Interface(Communication& com);
+    Interface(Camera& com);
     virtual         ~Interface();
 
     //- From HwInterface
@@ -171,13 +175,13 @@ public:
     const std::string&  getFileName(void);
     
     void                 setMxSettings(const std::string& str);
-    void                 setThresholdGain(int threshold, Communication::Gain gain);
+    void                 setThresholdGain(int threshold, Camera::Gain gain);
     int                 getThreshold(void);
-    Communication::Gain    getGain(void);
+    Camera::Gain    getGain(void);
     void                 sendAnyCommand(const std::string& str);
 
 private:
-    Communication&        m_com;
+    Camera&        m_com;
     CapList             m_cap_list;
     DetInfoCtrlObj        m_det_info;
     BufferCtrlObj        m_buffer;

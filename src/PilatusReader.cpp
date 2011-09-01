@@ -10,17 +10,15 @@
 #include "PilatusInterface.h"
 
 
-
-
 //---------------------------
 //- Ctor
 //---------------------------
-Reader::Reader(Communication& com, HwBufferCtrlObj& buffer_ctrl)
+Reader::Reader(Camera& com, HwBufferCtrlObj& buffer_ctrl)
       : m_com(com),
         m_buffer(buffer_ctrl),
         m_stop_already_done(true),
-        my_file_image("./image.txt"),
-        raw_data("")
+        m_image_size(PILATUS_6M_WIDTH,PILATUS_6M_HEIGHT),
+        m_dw(0)
 {
     DEB_CONSTRUCTOR();
     try
@@ -29,6 +27,8 @@ Reader::Reader(Communication& com, HwBufferCtrlObj& buffer_ctrl)
       enable_timeout_msg(false);
       enable_periodic_msg(false);
       set_periodic_msg_period(kTASK_PERIODIC_TIMEOUT_MS);
+      m_image = new uint32_t[m_image_size.getWidth()*m_image_size.getHeight()];
+      memset((uint32_t*)m_image,0,m_image_size.getWidth()*m_image_size.getHeight()*4);      
     }
     catch (Exception &e)
     {
@@ -46,6 +46,12 @@ Reader::~Reader()
     DEB_DESTRUCTOR();
     try
     {
+        
+        if(m_dw!=0)
+        {
+            delete m_dw;
+            m_dw = 0;
+        }
     }
     catch (Exception &e)
     {
@@ -63,12 +69,12 @@ void Reader::start()
     DEB_MEMBER_FUNCT();
     try
     {
-        m_image_number = 0;
-        m_stop_already_done = false;
-        vData.clear();
-        vLineData.clear();
-        raw_data.clear();
-          my_file_image.Load(&raw_data);        
+        if(m_dw!=0)
+        {
+            delete m_dw;
+            m_dw = 0;
+        }
+        m_dw = new gdshare::DirectoryWatcher(m_com.imgpath());
         this->post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
     }
     catch (Exception &e)
@@ -86,6 +92,11 @@ void Reader::stop()
 {
     DEB_MEMBER_FUNCT();
     {
+        if(m_dw!=0)
+        {
+            delete m_dw;
+            m_dw = 0;
+        }   
         this->post(new yat::Message(PILATUS_STOP_MSG), kPOST_MSG_TMO);
     }
 }
@@ -96,8 +107,19 @@ void Reader::stop()
 void Reader::reset()
 {
     DEB_MEMBER_FUNCT();
-    {
+    {     
         this->post(new yat::Message(PILATUS_RESET_MSG), kPOST_MSG_TMO);
+    }
+}
+
+//---------------------------
+//- Reader::getLastAcquiredFrame()
+//---------------------------
+int Reader::getLastAcquiredFrame(void)
+{
+    {
+        yat::MutexLock scoped_lock(contextual_lock_);
+        return m_image_number;        
     }
 }
 
@@ -106,7 +128,7 @@ void Reader::reset()
 //-----------------------------------------------------
 void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
 {
-  DEB_MEMBER_FUNCT();  
+  DEB_MEMBER_FUNCT();
   try
   {
     switch ( msg.type() )
@@ -134,87 +156,72 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
       {
         DEB_TRACE() <<"Reader::->TASK_PERIODIC";
         if(m_stop_already_done)
-          return;    
-
-        //simulate an image !        
-        Size image_size(2463,2527);
+        {            
+            if(m_elapsed_seconds_from_stop >= 0)//disable TO
+            {
+                enable_periodic_msg(false);            
+                return;
+            }
+            m_elapsed_seconds_from_stop ++;
+            DEB_TRACE()<<"Elapsed seconds since stop() = " <<m_elapsed_seconds_from_stop<< " s";
+        }
+        
         
         bool continueAcq = false;
-        int m_nb_frames = -1;
+
         StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
-        buffer_mgr.getNbBuffers(m_nb_frames);
-
-        if(m_image_number==0)
-        {
-          pImage = new uint32_t[image_size.getWidth()*image_size.getHeight()];
-          memset((uint32_t*)pImage,0,image_size.getWidth()*image_size.getHeight()*4);
-          raw_data.Split('\n',&vData);
-  
-          for(int i=0;i<2527;i++)
-          {
-            vData.at(i).Split(';',&vLineData);
-            for(int j=0;j<2463;j++)
-            {
-              pImage[i*2463+j]= (uint32_t)atoi(vLineData.at(j).c_str());
-            }
-          }
-        }
         
-
-        DEB_TRACE()  << "image#" << DEB_VAR1(m_image_number) <<" acquired !";        
-        int buffer_nb, concat_frame_nb;        
-        buffer_mgr.setStartTimestamp(Timestamp::now());
-        buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
-
-        void *ptr = buffer_mgr.getBufferPtr(buffer_nb,   concat_frame_nb);
-        memcpy((uint32_t *)ptr,(uint32_t *)( pImage),image_size.getWidth()*image_size.getHeight()*4);//*4 because 32bits
-
-        HwFrameInfoType frame_info;
-        frame_info.acq_frame_nb = m_image_number;
-        continueAcq = buffer_mgr.newFrameReady(frame_info);
-        m_image_number++;
-
-        // if nb acquired image < requested frames
-        if (continueAcq &&(!m_nb_frames || m_image_number<m_nb_frames))
+        if(m_dw && m_dw->HasChanged())
         {
-            //NOP
-        }
-        else
-        {
-            delete[]  pImage;            
-            enable_periodic_msg(false);          
-              this->post(new yat::Message(PILATUS_STOP_MSG), kPOST_MSG_TMO);
-        }
-        /********************************************
-        int nextFrameId = m_last_image_read + 1;
-        Data data = Data();
-        data.frameNumber = nextFrameId;
-        const Size &aSize = image_size;
-        data.width = aSize.getWidth();
-        data.height = aSize.getHeight();
-        data.type = Data::UINT32;
+            gdshare::FileNamePtrVector vecNewAndChangedFiles;
+            m_dw->GetChanges(&vecNewAndChangedFiles,&vecNewAndChangedFiles);
+             
+            for(int i= 0;i<vecNewAndChangedFiles.size();i++)
+            {
+                if(vecNewAndChangedFiles.at(i)->FileExists())
+                {
+                    DEB_TRACE()  << "image#" << m_image_number <<" acquired !";
+                    DEB_TRACE()  << "file : " << vecNewAndChangedFiles.at(i)->NameExt();
+                    
+                    int buffer_nb, concat_frame_nb;        
+                    buffer_mgr.setStartTimestamp(Timestamp::now());
+                    buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
+                    
+                    //simulate an image !
+                    DEB_TRACE()<<"-- simulate an image ";
+                    void *ptr = buffer_mgr.getBufferPtr(buffer_nb,   concat_frame_nb);
+                    memcpy((uint32_t *)ptr,(uint32_t *)( m_image),m_image_size.getWidth()*m_image_size.getHeight()*4);//*4 because 32bits
+                            
+                    DEB_TRACE()<<"-- newFrameReady";
+                    HwFrameInfoType frame_info;
+                    frame_info.acq_frame_nb = m_image_number;
+                    continueAcq = buffer_mgr.newFrameReady(frame_info);
 
-        Buffer *buffer = new Buffer();
-        buffer->owner = Buffer::MAPPED;
-        buffer->data = (void*)pImage;
-        data.setBuffer(buffer);
-
-        FrameDim frame_dim;
-        ((BufferCtrlObj&)m_buffer).getFrameDim(frame_dim);
-        bool continueFlag = true;
-        //if (((BufferCtrlObj&)m_buffer).getBufferMgr()!=NULL)
-        {
-            HwFrameInfoType hw_frame_info(nextFrameId,&data,&frame_dim,Timestamp::now(),0,HwFrameInfoType::Transfer);
-            continueFlag = (((BufferCtrlObj&)m_buffer).getBufferCbMgr()).newFrameReady(hw_frame_info);
+                    // if nb acquired image < requested frames
+                    if (continueAcq && (!m_com.nbImagesInSequence()||m_image_number<(m_com.nbImagesInSequence()-1)))
+                    {
+                        yat::MutexLock scoped_lock(contextual_lock_);
+                        {
+                            m_image_number++;
+                        }
+                    }
+                    else
+                    {   
+                        stop();
+                        return;
+                    }
+                }
+            }
         }
-        m_last_image_read = nextFrameId;
-        ********************************************/
       }
       break;
       //-----------------------------------------------------    
       case PILATUS_START_MSG:    
       {
         DEB_TRACE() << "Reader::->PILATUS_START_MSG";
+        m_image_number = 0;
+        m_elapsed_seconds_from_stop = 1;
+        m_stop_already_done = false;        
         enable_periodic_msg(true);
       }
       break;
@@ -223,14 +230,16 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
       {
         DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
         if(!m_stop_already_done)
+        {
+            m_elapsed_seconds_from_stop = 1;
             m_stop_already_done = true;
-        enable_periodic_msg(false);
+        }
       }
       break;
       //-----------------------------------------------------
       case PILATUS_RESET_MSG:
       {
-        DEB_TRACE() << "Reader::->PILATUS_RESET_MSG";        
+        DEB_TRACE() << "Reader::->PILATUS_RESET_MSG";
       }
       break;    
       //-----------------------------------------------------
@@ -245,3 +254,4 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
 }
 
 //-----------------------------------------------------
+

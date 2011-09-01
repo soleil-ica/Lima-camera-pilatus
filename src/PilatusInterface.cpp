@@ -9,7 +9,7 @@
 /*******************************************************************
  * \brief DetInfoCtrlObj constructor
  *******************************************************************/
-DetInfoCtrlObj::DetInfoCtrlObj(Communication& com)
+DetInfoCtrlObj::DetInfoCtrlObj(Camera& com)
                 :m_com(com)
 {
     DEB_CONSTRUCTOR();
@@ -40,7 +40,7 @@ void DetInfoCtrlObj::getDetectorImageSize(Size& size)
 {
     DEB_MEMBER_FUNCT();
     // get the max image size of the detector
-    size= Size(2463,2527);
+    size= Size(PILATUS_6M_WIDTH,PILATUS_6M_HEIGHT);
 }
 
 
@@ -106,7 +106,7 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
  * \brief BufferCtrlObj constructor
  *******************************************************************/
 
-BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
+BufferCtrlObj::BufferCtrlObj(Camera& com, DetInfoCtrlObj& det)
                 :
                     m_buffer_cb_mgr(m_buffer_alloc_mgr),
                     m_buffer_ctrl_mgr(m_buffer_cb_mgr),
@@ -114,8 +114,8 @@ BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
                     m_det(det)
 {
     DEB_CONSTRUCTOR();
-    ////m_reader = new Reader(com,*this);
-    ////m_reader->go(2000);
+    m_reader = new Reader(com,*this);
+    m_reader->go(2000);
 }
 
 //-----------------------------------------------------
@@ -124,8 +124,8 @@ BufferCtrlObj::BufferCtrlObj(Communication& com, DetInfoCtrlObj& det)
 BufferCtrlObj::~BufferCtrlObj()
 {
     DEB_DESTRUCTOR();
-    ////m_reader->stop();
-    ////m_reader->exit();
+    m_reader->stop();
+    m_reader->exit();
 }
 
 //-----------------------------------------------------
@@ -153,7 +153,7 @@ void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 void BufferCtrlObj::start()
 {
     DEB_MEMBER_FUNCT();
-    ////m_reader->start();
+    m_reader->start();
 }
 
 //-----------------------------------------------------
@@ -162,7 +162,7 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
     DEB_MEMBER_FUNCT();
-    ////m_reader->stop();
+    m_reader->stop();
 }
 
 //-----------------------------------------------------
@@ -171,7 +171,7 @@ void BufferCtrlObj::stop()
 void BufferCtrlObj::reset()
 {
     DEB_MEMBER_FUNCT();
-    ////m_reader->reset();
+    m_reader->reset();
 }
 
 //-----------------------------------------------------
@@ -219,7 +219,7 @@ void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
 
     Size imageSize;
     m_det.getMaxImageSize(imageSize);
-    max_nb_buffers = ( (Communication::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) ); //4 == image 32bits
+    max_nb_buffers = ( (Camera::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) ); //4 == image 32bits
     m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
 }
 
@@ -240,6 +240,15 @@ void *BufferCtrlObj::getFramePtr(int acq_frame_nb)
     DEB_MEMBER_FUNCT();
     return m_buffer_ctrl_mgr.getFramePtr(acq_frame_nb);
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+int BufferCtrlObj::getLastAcquiredFrame()
+{
+    return m_reader->getLastAcquiredFrame();
+}
+
 
 //-----------------------------------------------------
 //
@@ -286,8 +295,8 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  * \brief SyncCtrlObj constructor
  *******************************************************************/
 
-SyncCtrlObj::SyncCtrlObj(Communication& com, HwBufferCtrlObj& buffer_ctrl, DetInfoCtrlObj& det)
-            : HwSyncCtrlObj(buffer_ctrl), m_com(com), m_det(det),m_latency(0.003)
+SyncCtrlObj::SyncCtrlObj(Camera& com)
+            :  m_com(com),m_latency(LATENCY_DEFAULT_VALUE)
 {
 }
 
@@ -327,18 +336,18 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
     DEB_MEMBER_FUNCT();
     if (!checkTrigMode(trig_mode))
         throw LIMA_HW_EXC(InvalidValue, "Invalid trigger mode");
-    Communication::TriggerMode trig;
+    Camera::TriggerMode trig;
     switch(trig_mode)
     {
-        case IntTrig        : trig = Communication::INTERNAL_SINGLE;
+        case IntTrig        : trig = Camera::INTERNAL_SINGLE;
         break;
-        case IntTrigMult    : trig = Communication::INTERNAL_MULTI;
+        case IntTrigMult    : trig = Camera::INTERNAL_MULTI;
         break;
-        case ExtTrigSingle  : trig = Communication::EXTERNAL_SINGLE;
+        case ExtTrigSingle  : trig = Camera::EXTERNAL_SINGLE;
         break;
-        case ExtTrigMult    : trig = Communication::EXTERNAL_MULTI;
+        case ExtTrigMult    : trig = Camera::EXTERNAL_MULTI;
         break;
-        case ExtGate        : trig = Communication::EXTERNAL_GATE;
+        case ExtGate        : trig = Camera::EXTERNAL_GATE;
         break;
     }
 
@@ -351,18 +360,18 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 {
-    Communication::TriggerMode trig = m_com.triggerMode();
+    Camera::TriggerMode trig = m_com.triggerMode();
     switch(trig)
     {
-        case Communication::INTERNAL_SINGLE    :   trig_mode = IntTrig;
+        case Camera::INTERNAL_SINGLE    :   trig_mode = IntTrig;
         break;
-        case Communication::INTERNAL_MULTI     :   trig_mode = IntTrigMult;
+        case Camera::INTERNAL_MULTI     :   trig_mode = IntTrigMult;
         break;
-        case Communication::EXTERNAL_SINGLE    :   trig_mode = ExtTrigSingle;
+        case Camera::EXTERNAL_SINGLE    :   trig_mode = ExtTrigSingle;
         break;
-        case Communication::EXTERNAL_MULTI     :   trig_mode = ExtTrigMult;
+        case Camera::EXTERNAL_MULTI     :   trig_mode = ExtTrigMult;
         break;
-        case Communication::EXTERNAL_GATE      :   trig_mode = ExtGate;
+        case Camera::EXTERNAL_GATE      :   trig_mode = ExtGate;
         break;
     }
 }
@@ -452,11 +461,11 @@ void SyncCtrlObj:: prepareAcq()
  * \brief Hw Interface constructor
  *******************************************************************/
 
-Interface::Interface(Communication& com)
+Interface::Interface(Camera& com)
             :   m_com(com),
                 m_det_info(com),
                 m_buffer(com,m_det_info ),
-                m_sync(com, m_buffer, m_det_info)
+                m_sync(com)
 {
     DEB_CONSTRUCTOR();
 
@@ -516,9 +525,9 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    Communication::Status com_status = Communication::OK;
+    Camera::Status com_status = Camera::OK;
     com_status = m_com.status();
-    if (com_status == Communication::DISCONNECTED)
+    if (com_status == Camera::DISCONNECTED)
         m_com.connect(m_com.serverIP().c_str(),m_com.serverPort());
     m_buffer.reset();
     m_sync.prepareAcq();
@@ -551,15 +560,22 @@ void Interface::stopAcq()
 void Interface::getStatus(StatusType& status)
 {
 
-    Communication::Status com_status = Communication::STANDBY;
+    DEB_MEMBER_FUNCT();
+    Camera::Status com_status = Camera::STANDBY;
     com_status = m_com.status();
 
-    if(com_status == Communication::STANDBY)
+    if(com_status == Camera::STANDBY)
     {
         status.det = DetIdle;
-        status.acq = AcqReady;
+        int nbFrames = 0;
+        m_sync.getNbHwFrames(nbFrames);
+        if(getNbHwAcquiredFrames() >= nbFrames)
+            status.acq = AcqReady;        
+        else
+            status.acq = AcqRunning;         
+           
     }
-    else if(com_status == Communication::ERROR)
+    else if(com_status == Camera::ERROR)
     {
         status.det = DetFault;
         status.acq = AcqFault;
@@ -579,9 +595,7 @@ void Interface::getStatus(StatusType& status)
 int Interface::getNbHwAcquiredFrames()
 {
     DEB_MEMBER_FUNCT();
-    int acq_frames = 0;
-    //self.__buffer.getLastAcquiredFrame() + 1
-    //return acq_frames;
+    int acq_frames = m_buffer.getLastAcquiredFrame()+1;
     return acq_frames;
 }
 
@@ -598,7 +612,7 @@ void Interface::setLatency(double latency)
 //-----------------------------------------------------
 double Interface::getLatency(void)
 {
-   double latency = 0.003;
+   double latency = LATENCY_DEFAULT_VALUE;
    m_sync.getLatTime(latency);
    return latency;   
 }
@@ -650,7 +664,7 @@ void Interface::setMxSettings(const std::string& str)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Interface::setThresholdGain(int threshold, Communication::Gain gain)
+void Interface::setThresholdGain(int threshold, Camera::Gain gain)
 {
     m_com.setThresholdGain(threshold, gain);
 }
@@ -667,7 +681,7 @@ int Interface::getThreshold(void)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::Gain Interface::getGain(void)
+Camera::Gain Interface::getGain(void)
 {
     return m_com.gain();
 }

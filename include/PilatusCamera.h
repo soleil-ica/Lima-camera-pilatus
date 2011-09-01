@@ -1,5 +1,5 @@
-#ifndef PILATUSCOMMUNICATION_H
-#define PILATUSCOMMUNICATION_H
+#ifndef PILATUSCAMERA_H
+#define PILATUSCAMERA_H
 
 #include "Debug.h"
 
@@ -11,9 +11,9 @@ namespace lima
 {
 namespace PilatusCpp
 {
-class Communication
+class Camera
 {
-    DEB_CLASS_NAMESPC(DebModCameraCom,"Communication","Pilatus");
+    DEB_CLASS_NAMESPC(DebModCameraCom,"Camera","Pilatus");
 
 public:
     enum Status
@@ -29,6 +29,7 @@ public:
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
         RUNNING,
+        ANY,
         STANDBY
     };
 
@@ -50,8 +51,8 @@ public:
         EXTERNAL_GATE
     };
 
-    Communication(const char *host = NULL,int port = 0);
-    ~Communication();
+    Camera(const char *host = NULL,int port = 0);
+    ~Camera();
     
     void connect(const char* host,int port);
     
@@ -76,7 +77,7 @@ public:
     double exposurePeriod() const;
     void setExposurePeriod(double expo_period);
 
-    int nbImagesInIequence() const;
+    int nbImagesInSequence() const;
     void setNbImagesInSequence(int nb);
 
     double hardwareTriggerDelay() const;
@@ -147,4 +148,4 @@ private:
 };
 }
 }
-#endif//PILATUSCOMMUNICATION_H
+#endif//PILATUSCAMERA_H

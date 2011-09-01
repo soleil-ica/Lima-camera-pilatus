@@ -41,14 +41,14 @@
 
 #include "Exceptions.h"
 
-#include "PilatusCommunication.h"
+#include "PilatusCamera.h"
 
 using namespace lima;
 using namespace lima::PilatusCpp;
 
 
 
-#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Communication::ERROR)    \
+#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Camera::ERROR)    \
 {                                                                   \
   if(!m_cond.wait(TIME_OUT))                                        \
     THROW_HW_ERROR(lima::Error) << errmsg;                          \
@@ -74,7 +74,7 @@ inline void _split(const std::string inString, const std::string &separator,std:
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::Communication(const char *host,int port)
+Camera::Camera(const char *host,int port)
                 :   m_socket(-1),
                     m_stop(false),
                     m_thread_id(0),
@@ -96,7 +96,7 @@ Communication::Communication(const char *host,int port)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::~Communication()
+Camera::~Camera()
 {
     AutoMutex aLock(m_cond.mutex());
     m_stop = true;
@@ -108,13 +108,18 @@ Communication::~Communication()
 
     void *returnPt;
     if(m_thread_id > 0)
-        pthread_join(m_thread_id,&returnPt);
+    {
+        if(pthread_join(m_thread_id,&returnPt)!=0)
+        {
+             std::cout<<"UNknown Error"<<std::endl; 
+        } 
+    }
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-std::string Communication::serverIP() const
+std::string Camera::serverIP() const
 {
     return m_server_ip;
 }
@@ -122,7 +127,7 @@ std::string Communication::serverIP() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-int Communication::serverPort() const
+int Camera::serverPort() const
 {
     return m_server_port;
 }
@@ -130,7 +135,7 @@ int Communication::serverPort() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::_initVariable()
+void Camera::_initVariable()
 {
     m_imgpath                           = "/ramdisk/images/";
     m_file_name                         = "image_%.5d.cbf";
@@ -157,7 +162,7 @@ void Communication::_initVariable()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::connect(const char *host,int port)
+void Camera::connect(const char *host,int port)
 {
     DEB_MEMBER_FUNCT();
 
@@ -186,7 +191,7 @@ void Communication::connect(const char *host,int port)
                     THROW_HW_ERROR(Error) << "Can't open connection";
                 }
                 write(m_pipes[1],"|",1);
-                m_state = Communication::STANDBY;
+                m_state = Camera::STANDBY;
                 _resync();
             }
             else
@@ -198,7 +203,7 @@ void Communication::connect(const char *host,int port)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::_resync()
+void Camera::_resync()
 {
     send("SetThreshold");
     send("exptime");
@@ -215,7 +220,7 @@ void Communication::_resync()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::_reinit()
+void Camera::_reinit()
 {
     _resync();
     send("nimages");
@@ -224,10 +229,9 @@ void Communication::_reinit()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::send(const std::string& message)
+void Camera::send(const std::string& message)
 {
     DEB_MEMBER_FUNCT();
-
     std::string msg = message;
     msg+= SOCKET_SEPARATOR;
     DEB_TRACE() << ">> "<<msg;    
@@ -237,9 +241,9 @@ void Communication::send(const std::string& message)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void* Communication::_runFunc(void *commPt)
+void* Camera::_runFunc(void *commPt)
 {
-    ((Communication*)commPt)->_run();
+    ((Camera*)commPt)->_run();
     return NULL;
 }
 
@@ -299,7 +303,7 @@ TO DO :
 1 - manage state for threshold
 2 - resync() after threshold -> need manage state
 ******************************************************/
-void Communication::_run()
+void Camera::_run()
 {
     DEB_MEMBER_FUNCT();
     struct pollfd fds[2];
@@ -327,9 +331,8 @@ void Communication::_run()
         if(nb_poll_fd > 1 && fds[1].revents)
         {
             char messages[16384];
-            int aMessageSize = recv(m_socket,messages,sizeof(messages),0);
-            std::string strMessages(messages,aMessageSize );
-            if(!aMessageSize)
+            int aMessageSize = recv(m_socket,messages,sizeof(messages),0);                    
+            if(aMessageSize<=0)
             {
                 DEB_TRACE() <<"-- no message received";
                 close(m_socket);
@@ -337,7 +340,8 @@ void Communication::_run()
                 m_state = DISCONNECTED;
             }
             else
-            {
+            {                
+                std::string strMessages(messages,aMessageSize );                    
                 DEB_TRACE() << "<< messages = "<<strMessages;
                 std::vector<std::string> msg_vector;
                 _split(strMessages,SPLIT_SEPARATOR,msg_vector);
@@ -368,12 +372,12 @@ void Communication::_run()
                                 std::string &gain_value = gain_split[0];
                                 std::map<std::string,Gain>::iterator gFind = GAIN_SERVER_RESPONSE.find(gain_value);
                                 m_gain = gFind->second;
-                                m_state = Communication::STANDBY;                               
+                                m_state = Camera::STANDBY;                               
                             }
                             else if(real_message.find("/tmp/setthreshold")!=std::string::npos)
                             {
-                                DEB_TRACE() << "-- Threshold process succeeded]";
-                                m_state = Communication::STANDBY;
+                                DEB_TRACE() << "-- Threshold process succeeded";
+                                m_state = Camera::STANDBY;
                                 /////@@@@ to do later _reinit(); // resync with server
                             }
                             else if(real_message.find("Exposure")!=std::string::npos)
@@ -392,43 +396,43 @@ void Communication::_run()
                                 {
                                     m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());\
                                 }
-                                if(m_state!=Communication::SETTING_EXPOSURE)
-                                  m_state = Communication::STANDBY;
+                                if(m_state!=Camera::RUNNING)
+                                  m_state = Camera::STANDBY;
                             }
                             else if(real_message.find("Delay")!=std::string::npos)
                             {
                                 int columnPos = real_message.find(":");
                                 int lastSpace = real_message.rfind(" ");
                                 m_hardware_trigger_delay = atof(real_message.substr(columnPos + 1,lastSpace).c_str());
-                                if(m_state!=Communication::SETTING_EXPOSURE)
-                                  m_state = Communication::STANDBY;
+                                if(m_state!=Camera::RUNNING)
+                                  m_state = Camera::STANDBY;
                             }
                             else if(real_message.find("N images")!=std::string::npos)
                             {
                                 int columnPos = real_message.find(":");
                                 m_nimages = atoi(real_message.substr(columnPos+1).c_str());
-                                if(m_state!=Communication::SETTING_EXPOSURE)
-                                  m_state = Communication::STANDBY;
+                                if(m_state!=Camera::RUNNING)
+                                  m_state = Camera::STANDBY;
                             }
                             
-                            if(m_state = Communication::SETTING_THRESHOLD) 
-                              m_state = Communication::STANDBY;                           
+                            if(m_state == Camera::SETTING_THRESHOLD) 
+                              m_state = Camera::STANDBY;                           
                         }
                         else  // ERROR MESSAGE
                         {
-                            if(m_state == Communication::SETTING_THRESHOLD)
+                            if(m_state == Camera::SETTING_THRESHOLD)
                             {
-                                m_state = Communication::ERROR;
+                                m_state = Camera::ERROR;
                                 DEB_TRACE() << "-- Threshold process failed";
                             }
-                            else if(m_state == Communication::SETTING_EXPOSURE)
+                            else if(m_state == Camera::RUNNING)
                             {
-                                m_state = Communication::ERROR;
-                                DEB_TRACE() << "-- Exposure setting failed";
+                                m_state = Camera::ERROR;
+                                DEB_TRACE() << "-- Exposure process failed";
                             }
                             else
                             {
-                                m_state = Communication::ERROR;                                
+                                m_state = Camera::ERROR;                                
                                 DEB_TRACE() << "-- ERROR";
                                 DEB_TRACE() << msg.substr(2);
                             }
@@ -438,20 +442,20 @@ void Communication::_run()
                     else if(msg.substr(0,2) == "13") //Acquisition Killed
                     {
                         DEB_TRACE() << "-- Acquisition Killed"; 
-                        m_state = Communication::STANDBY;
+                        m_state = Camera::STANDBY;
                     }
                     else if(msg.substr(0,2) == "7 ")
                     {
                         if(msg.substr(2,2) == "OK")
                         {
-                            DEB_TRACE() << "-- Exposure succeeded";                      
-                            m_state = Communication::STANDBY;
+                            DEB_TRACE() << "-- Exposure succeeded";
+                            m_state = Camera::STANDBY;
                             std::string real_message = msg.substr(5);
                         }
                         else
                         {
                             DEB_TRACE() << "-- ERROR";                      
-                            m_state = Communication::ERROR;
+                            m_state = Camera::ERROR;
                             msg = msg.substr(2);
                             m_error_message = msg.substr(msg.find(" "));
                         }
@@ -463,7 +467,7 @@ void Communication::_run()
                             DEB_TRACE() << "-- ERROR";
                             m_error_message = msg.substr(6);
                             DEB_TRACE() << m_error_message;
-                            m_state = Communication::ERROR;
+                            m_state = Camera::ERROR;
                         }
                     }
                     else if(msg.substr(0,2) == "10")
@@ -471,12 +475,13 @@ void Communication::_run()
                         if(msg.substr(3,2) == "OK")
                         {
                             DEB_TRACE() << "-- imgpath setting succeeded";
-                            m_state = Communication::STANDBY;
+                            ////m_imgpath = msg.substr(6);////@@@@
+                            m_state = Camera::STANDBY;
                         }
                         else
                         {
                             DEB_TRACE() << "-- ERROR";
-                            m_state = Communication::ERROR;
+                            m_state = Camera::ERROR;
                             msg = msg.substr(2);
                             m_error_message = msg.substr(msg.find(" "));
                             DEB_TRACE() << m_error_message;
@@ -491,11 +496,11 @@ void Communication::_run()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setImgpath(const std::string& path)
+void Camera::setImgpath(const std::string& path)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set imgpath, server not idle");
+    WAIT_UNTIL(Camera::STANDBY,"Could not set imgpath, server not idle");
     m_imgpath = path;    
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;
@@ -505,7 +510,7 @@ void Communication::setImgpath(const std::string& path)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Communication::imgpath(void)
+const std::string& Camera::imgpath(void)
 {
     AutoMutex aLock(m_cond.mutex());
     return m_imgpath;
@@ -514,7 +519,7 @@ const std::string& Communication::imgpath(void)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------   
-void Communication::setFileName(const std::string& name)
+void Camera::setFileName(const std::string& name)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
@@ -525,7 +530,7 @@ void Communication::setFileName(const std::string& name)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Communication::fileName(void)
+const std::string& Camera::fileName(void)
 {
     AutoMutex aLock(m_cond.mutex());
     return m_file_name;
@@ -535,7 +540,7 @@ const std::string& Communication::fileName(void)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::Status Communication::status() const
+Camera::Status Camera::status() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_state;
@@ -544,7 +549,7 @@ Communication::Status Communication::status() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Communication::errorMessage() const
+const std::string& Camera::errorMessage() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_error_message;
@@ -553,17 +558,17 @@ const std::string& Communication::errorMessage() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::softReset()
+void Camera::softReset()
 {
     AutoMutex aLock(m_cond.mutex());
     m_error_message.clear();
-    m_state = Communication::STANDBY;
+    m_state = Camera::STANDBY;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::hardReset()
+void Camera::hardReset()
 {
     AutoMutex aLock(m_cond.mutex());
     send("resetcam");
@@ -572,7 +577,7 @@ void Communication::hardReset()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-int Communication::threshold() const
+int Camera::threshold() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_threshold;
@@ -581,7 +586,7 @@ int Communication::threshold() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::Gain Communication::gain() const
+Camera::Gain Camera::gain() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_gain;
@@ -590,12 +595,13 @@ Communication::Gain Communication::gain() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setThresholdGain(int value,Communication::Gain gain)
+void Camera::setThresholdGain(int value,Camera::Gain gain)
 {
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set threshold, server is not idle");
+    WAIT_UNTIL(Camera::STANDBY,"Could not set threshold, server is not idle");
+    m_state = Camera::SETTING_THRESHOLD;    
     if(gain == DEFAULT_GAIN)
     {
         char buffer[128];
@@ -611,7 +617,6 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
         snprintf(buffer,sizeof(buffer),"setthreshold %s %d",gainStr.c_str(),value);
 
         send(buffer);
-        m_state = Communication::SETTING_THRESHOLD;
     }
 
 
@@ -622,7 +627,7 @@ void Communication::setThresholdGain(int value,Communication::Gain gain)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-double Communication::exposure() const
+double Camera::exposure() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_exposure;
@@ -631,17 +636,17 @@ double Communication::exposure() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setExposure(double val)
+void Camera::setExposure(double val)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
     // yet an other border-effect with the SPEC CCD interface
     // to reach the GATE mode SPEC programs extgate + expotime = 0
-    if(m_trigger_mode == Communication::EXTERNAL_GATE and val <= 0)
+    if(m_trigger_mode == Camera::EXTERNAL_GATE and val <= 0)
         return;
 
-    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure, server is not idle");
-    m_state = Communication::SETTING_EXPOSURE;
+    WAIT_UNTIL(Camera::STANDBY,"Could not set exposure, server is not idle");
+    m_state = Camera::SETTING_EXPOSURE;
     std::stringstream msg;
     msg << "exptime " << val;
     send(msg.str());
@@ -650,7 +655,7 @@ void Communication::setExposure(double val)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-double Communication::exposurePeriod() const
+double Camera::exposurePeriod() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_exposure_period;
@@ -659,13 +664,12 @@ double Communication::exposurePeriod() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setExposurePeriod(double val)
+void Camera::setExposurePeriod(double val)
 {
     DEB_MEMBER_FUNCT();
-
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure period, server not idle");
-    m_state = Communication::SETTING_EXPOSURE_PERIOD;
+    WAIT_UNTIL(Camera::STANDBY,"Could not set exposure period, server not idle");
+    m_state = Camera::SETTING_EXPOSURE_PERIOD;
     std::stringstream msg;
     msg << "expperiod " << val;
     send(msg.str());
@@ -674,7 +678,7 @@ void Communication::setExposurePeriod(double val)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-int Communication::nbImagesInIequence() const
+int Camera::nbImagesInSequence() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_nimages;
@@ -683,12 +687,12 @@ int Communication::nbImagesInIequence() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setNbImagesInSequence(int nb)
+void Camera::setNbImagesInSequence(int nb)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set number image in sequence, server not idle");
-    m_state = Communication::SETTING_NB_IMAGE_IN_SEQUENCE;
+    WAIT_UNTIL(Camera::STANDBY,"Could not set number image in sequence, server not idle");
+    m_state = Camera::SETTING_NB_IMAGE_IN_SEQUENCE;
     std::stringstream msg;
     msg << "nimages " << nb;
     send(msg.str());
@@ -697,7 +701,7 @@ void Communication::setNbImagesInSequence(int nb)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-double Communication::hardwareTriggerDelay() const
+double Camera::hardwareTriggerDelay() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_hardware_trigger_delay;
@@ -706,13 +710,12 @@ double Communication::hardwareTriggerDelay() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setHardwareTriggerDelay(double value)
+void Camera::setHardwareTriggerDelay(double value)
 {
     DEB_MEMBER_FUNCT();
-
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set hardware trigger delay, server not idle");
-    m_state = Communication::SETTING_HARDWARE_TRIGGER_DELAY;
+    WAIT_UNTIL(Camera::STANDBY,"Could not set hardware trigger delay, server not idle");
+    m_state = Camera::SETTING_HARDWARE_TRIGGER_DELAY;
     std::stringstream msg;
     msg << "delay " << value;
     send(msg.str());
@@ -721,7 +724,7 @@ void Communication::setHardwareTriggerDelay(double value)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-int Communication::nbExposurePerFrame() const
+int Camera::nbExposurePerFrame() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_exposure_per_frame;
@@ -730,13 +733,12 @@ int Communication::nbExposurePerFrame() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setNbExposurePerFrame(int val)
+void Camera::setNbExposurePerFrame(int val)
 {
     DEB_MEMBER_FUNCT();
-
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not set exposure per frame, server not idle");
-    m_state = Communication::SETTING_EXPOSURE_PER_FRAME;
+    WAIT_UNTIL(Camera::STANDBY,"Could not set exposure per frame, server not idle");
+    m_state = Camera::SETTING_EXPOSURE_PER_FRAME;
     std::stringstream msg;
     msg << "nexpframe " << val;
     send(msg.str());
@@ -745,7 +747,7 @@ void Communication::setNbExposurePerFrame(int val)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Communication::TriggerMode Communication::triggerMode() const
+Camera::TriggerMode Camera::triggerMode() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_trigger_mode;
@@ -760,7 +762,7 @@ Communication::TriggerMode Communication::triggerMode() const
 // - External multi start == EXTERNAL_MULTI
 // - External gate == EXTERNAL_GATE
 //-----------------------------------------------------
-void Communication::setTriggerMode(Communication::TriggerMode triggerMode)
+void Camera::setTriggerMode(Camera::TriggerMode triggerMode)
 {
     AutoMutex aLock(m_cond.mutex());
     m_trigger_mode = triggerMode;
@@ -770,16 +772,15 @@ void Communication::setTriggerMode(Communication::TriggerMode triggerMode)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::startAcquisition(int image_number)
+void Camera::startAcquisition(int image_number)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-
-    if(m_state == Communication::RUNNING)
+    if(m_state == Camera::RUNNING)
         THROW_HW_ERROR(Error) << "Could not start acquisition, you have to wait the end of the previous one";
 
     std::stringstream msg;
-    if( m_trigger_mode != Communication::EXTERNAL_GATE)
+    if( m_trigger_mode != Camera::EXTERNAL_GATE)
     {
         while(m_exposure_period <= (m_exposure + 0.002999))
         {
@@ -794,18 +795,20 @@ void Communication::startAcquisition(int image_number)
 
     msg.clear();
     //Start Acquisition
-    WAIT_UNTIL(Communication::STANDBY,"Could not start Acauisition, server not idle");    
-    if(m_trigger_mode == Communication::EXTERNAL_SINGLE)
+ 
+    WAIT_UNTIL(Camera::STANDBY,"Could not start Acquisition, server not idle");    
+    m_state = Camera::RUNNING;       
+    if(m_trigger_mode == Camera::EXTERNAL_SINGLE)
     {
         msg << "exttrigger " << filename;
         send(msg.str());
     }
-    else if(m_trigger_mode == Communication::EXTERNAL_MULTI)
+    else if(m_trigger_mode == Camera::EXTERNAL_MULTI)
     {
         msg << "extmtrigger " << filename;
         send(msg.str());
     }
-    else if(m_trigger_mode == Communication::EXTERNAL_GATE)
+    else if(m_trigger_mode == Camera::EXTERNAL_GATE)
     {
         msg << "extenable " << filename;
         send(msg.str());
@@ -816,21 +819,20 @@ void Communication::startAcquisition(int image_number)
         send(msg.str());
     }
 
-    if(m_trigger_mode != Communication::INTERNAL_SINGLE || m_trigger_mode != Communication::INTERNAL_MULTI)
+    if(m_trigger_mode != Camera::INTERNAL_SINGLE || m_trigger_mode != Camera::INTERNAL_MULTI)
         m_cond.wait(TIME_OUT);
 
-    m_state = Communication::RUNNING;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::stopAcquisition()
+void Camera::stopAcquisition()
 {
     AutoMutex aLock(m_cond.mutex());
-    if(m_state == Communication::RUNNING)
+    if(m_state == Camera::RUNNING)
     {
-        m_state = Communication::KILL_ACQUISITION;
+        m_state = Camera::KILL_ACQUISITION;
         send("k");
     }
 }
@@ -838,7 +840,7 @@ void Communication::stopAcquisition()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::setGapfill(bool val)
+void Camera::setGapfill(bool val)
 {
     AutoMutex aLock(m_cond.mutex());
     m_gap_fill = val;
@@ -850,7 +852,7 @@ void Communication::setGapfill(bool val)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-bool Communication::gapfill() const
+bool Camera::gapfill() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_gap_fill;
@@ -859,12 +861,12 @@ bool Communication::gapfill() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Communication::sendAnyCommand(const std::string& message)
+void Camera::sendAnyCommand(const std::string& message)
 {
     DEB_MEMBER_FUNCT();
 
     AutoMutex aLock(m_cond.mutex());
-    WAIT_UNTIL(Communication::STANDBY,"Could not send the Command, server is not idle");
+    WAIT_UNTIL(Camera::STANDBY,"Could not send the Command, server is not idle");
 
     send(message);
 }
