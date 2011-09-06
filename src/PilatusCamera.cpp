@@ -44,7 +44,7 @@
 #include "PilatusCamera.h"
 
 using namespace lima;
-using namespace lima::PilatusCpp;
+using namespace lima::Pilatus;
 
 
 

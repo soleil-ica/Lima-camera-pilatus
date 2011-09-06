@@ -9,7 +9,7 @@ static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
 
 namespace lima
 {
-namespace PilatusCpp
+namespace Pilatus
 {
 class Camera
 {

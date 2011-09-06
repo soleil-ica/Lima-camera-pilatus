@@ -34,14 +34,14 @@ const size_t  PILATUS_RESET_MSG     =   (yat::FIRST_USER_MSG + 302);
 
 
 using namespace lima;
-using namespace lima::PilatusCpp;
+using namespace lima::Pilatus;
 using namespace std;
 
 
 
 namespace lima
 {
-namespace PilatusCpp
+namespace Pilatus
 {
 
 /*******************************************************************

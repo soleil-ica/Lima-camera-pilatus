@@ -9,7 +9,7 @@
 #include "PilatusReader.h"
 
 using namespace lima;
-using namespace lima::PilatusCpp;
+using namespace lima::Pilatus;
 using namespace std;
 
 #define LATENCY_DEFAULT_VALUE          0.003
@@ -18,7 +18,7 @@ using namespace std;
 
 namespace lima
 {
-namespace PilatusCpp
+namespace Pilatus
 {
 class Interface;
 
