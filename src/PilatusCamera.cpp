@@ -98,10 +98,13 @@ Camera::Camera(const char *host,int port)
 //-----------------------------------------------------
 Camera::~Camera()
 {
+    DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
     m_stop = true;
-    if(m_socket >= -1)
+    if(m_socket >= 0)
         close(m_socket);
+        std::cout<<"close = "<<close(m_socket)<<std::endl;    
+    }
     else
         write(m_pipes[1],"|",1);
     aLock.unlock();
@@ -109,10 +112,12 @@ Camera::~Camera()
     void *returnPt;
     if(m_thread_id > 0)
     {
+        DEB_TRACE()<<"[pthread_join - BEGIN]";
         if(pthread_join(m_thread_id,&returnPt)!=0)
         {
-             std::cout<<"UNknown Error"<<std::endl; 
-        } 
+            DEB_TRACE()<<"UNknown Error";
+        }
+        DEB_TRACE()<<"[pthread_join - END]";
     }
 }
 
@@ -300,8 +305,9 @@ setthr low 5000
 15 ERR ERROR: unknown gain setting: low 5000
 
 TO DO :
-1 - manage state for threshold
-2 - resync() after threshold -> need manage state
+1 - manage state for threshold : DONE -> OK
+2 - resync() after threshold -> need manage state : DONE -> OK
+3 - manage the stop() command like an abort :DONE -> OK
 ******************************************************/
 void Camera::_run()
 {
@@ -337,7 +343,7 @@ void Camera::_run()
                 DEB_TRACE() <<"-- no message received";
                 close(m_socket);
                 m_socket = -1;
-                m_state = DISCONNECTED;
+                m_state = Camera::DISCONNECTED;                
             }
             else
             {                
@@ -378,7 +384,7 @@ void Camera::_run()
                             {
                                 DEB_TRACE() << "-- Threshold process succeeded";
                                 m_state = Camera::STANDBY;
-                                /////@@@@ to do later _reinit(); // resync with server
+                                _reinit(); // resync with server
                             }
                             else if(real_message.find("Exposure")!=std::string::npos)
                             {
@@ -830,7 +836,7 @@ void Camera::startAcquisition(int image_number)
 void Camera::stopAcquisition()
 {
     AutoMutex aLock(m_cond.mutex());
-    if(m_state == Camera::RUNNING)
+    ////if(m_state == Camera::RUNNING)
     {
         m_state = Camera::KILL_ACQUISITION;
         send("k");
@@ -842,7 +848,9 @@ void Camera::stopAcquisition()
 //-----------------------------------------------------
 void Camera::setGapfill(bool val)
 {
+    DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
+    WAIT_UNTIL(Camera::STANDBY,"Could not set gap, server not idle");
     m_gap_fill = val;
     std::stringstream msg;
     msg << "gapfill " << m_gap_fill ? -1 : 0;

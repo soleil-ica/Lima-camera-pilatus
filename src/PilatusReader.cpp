@@ -46,7 +46,6 @@ Reader::~Reader()
     DEB_DESTRUCTOR();
     try
     {
-        
         if(m_dw!=0)
         {
             delete m_dw;
@@ -165,17 +164,16 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
             m_elapsed_seconds_from_stop ++;
             DEB_TRACE()<<"Elapsed seconds since stop() = " <<m_elapsed_seconds_from_stop<< " s";
         }
-        
-        
+
         bool continueAcq = false;
 
         StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
         
-        if(m_dw && m_dw->HasChanged())
+        if(m_dw)
         {
             gdshare::FileNamePtrVector vecNewAndChangedFiles;
             m_dw->GetChanges(&vecNewAndChangedFiles,&vecNewAndChangedFiles);
-             
+
             for(int i= 0;i<vecNewAndChangedFiles.size();i++)
             {
                 if(vecNewAndChangedFiles.at(i)->FileExists())
@@ -202,7 +200,7 @@ void Reader::handle_message( yat::Message& msg )  throw( yat::Exception )
                     {
                         yat::MutexLock scoped_lock(contextual_lock_);
                         {
-                            m_image_number++;
+                          m_image_number++;
                         }
                     }
                     else

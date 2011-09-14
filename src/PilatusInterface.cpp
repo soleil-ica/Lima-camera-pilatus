@@ -526,9 +526,9 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    Camera::Status com_status = Camera::OK;
-    com_status = m_cam.status();
-    if (com_status == Camera::DISCONNECTED)
+    Camera::Status cam_status = Camera::OK;
+    cam_status = m_cam.status();
+    if (cam_status == Camera::DISCONNECTED)
         m_cam.connect(m_cam.serverIP().c_str(),m_cam.serverPort());
     m_buffer.reset();
     m_sync.prepareAcq();
@@ -562,23 +562,30 @@ void Interface::getStatus(StatusType& status)
 {
 
     DEB_MEMBER_FUNCT();
-    Camera::Status com_status = Camera::STANDBY;
-    com_status = m_cam.status();
+    Camera::Status cam_status = Camera::STANDBY;
+    cam_status = m_cam.status();
 
-    if(com_status == Camera::STANDBY)
+    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION)
     {
         status.det = DetIdle;
+
         int nbFrames = 0;
         m_sync.getNbHwFrames(nbFrames);
         if(getNbHwAcquiredFrames() >= nbFrames)
             status.acq = AcqReady;        
         else
-            status.acq = AcqRunning;         
-           
+            status.acq = AcqRunning;
+
+        status.acq = AcqReady; 
     }
-    else if(com_status == Camera::ERROR)
+    else if(cam_status == Camera::DISCONNECTED)
     {
         status.det = DetFault;
+        status.acq = AcqFault;
+    }
+    else if(cam_status == Camera::ERROR)
+    {
+        status.det = DetIdle;
         status.acq = AcqFault;
     }
     else
