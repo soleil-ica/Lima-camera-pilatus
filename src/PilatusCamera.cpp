@@ -102,6 +102,7 @@ Camera::~Camera()
     AutoMutex aLock(m_cond.mutex());
     m_stop = true;
     if(m_socket >= 0)
+    {
         close(m_socket);
         std::cout<<"close = "<<close(m_socket)<<std::endl;    
     }
