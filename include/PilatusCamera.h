@@ -59,6 +59,10 @@ public:
     std::string serverIP() const;
     int serverPort() const;
     
+	void enableDirectoryWatcher(void);
+	void disableDirectoryWatcher(void);
+	bool isDirectoryWatcherEnabled();
+
     void setImgpath(const std::string& path);
     const std::string& imgpath(void);
     
@@ -99,6 +103,7 @@ public:
     
     void sendAnyCommand(const std::string& message);    
 
+    int nbAcquiredImages();
     //s
     static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
     static const double             TIME_OUT = 10.;
@@ -132,6 +137,7 @@ private:
     mutable Cond            m_cond;
 
     //Cache variables
+    bool 					m_use_dw;
     std::string             m_error_message;
     double                  m_exposure;
     int                     m_exposure_per_frame;
@@ -145,6 +151,7 @@ private:
     std::string             m_imgpath;
     std::string             m_file_name;
     std::string             m_file_pattern;    
+    int						m_nb_acquired_images;
 };
 }
 }

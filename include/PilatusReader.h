@@ -56,12 +56,13 @@ class Reader : public yat::Task
  public:
 
     Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl);
-    ~Reader();
+    virtual ~Reader();
 
     void start();
     void stop();
     void reset();
     int  getLastAcquiredFrame(void);
+    void addNewFrame(void);
 
   //- [yat::Task implementation]
   protected: 
@@ -72,7 +73,8 @@ class Reader : public yat::Task
     //- Mutex
     yat::Mutex                  lock_;
     yat::Mutex                  contextual_lock_;
-    Camera&              m_cam;
+    Camera&              		m_cam;
+    bool						m_use_dw;
     HwBufferCtrlObj&            m_buffer;
     int                         m_image_number;
     bool                        m_stop_already_done;

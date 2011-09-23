@@ -325,6 +325,7 @@ bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
 
     default:
         valid_mode = false;
+        break;
     }
     return valid_mode;
 }
@@ -695,8 +696,13 @@ Camera::Gain Interface::getGain(void)
 }
 
 //-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Interface::sendAnyCommand(const std::string& str)
 {
     m_cam.sendAnyCommand(str);
 }
+
+//-----------------------------------------------------
+//
 //-----------------------------------------------------
