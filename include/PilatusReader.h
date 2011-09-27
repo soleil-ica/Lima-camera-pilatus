@@ -62,14 +62,13 @@ class Reader : public yat::Task
     void stop();
     void reset();
     int  getLastAcquiredFrame(void);
-    void addNewFrame(void);
 
   //- [yat::Task implementation]
   protected: 
     virtual void handle_message( yat::Message& msg )    throw (yat::Exception);
 
  private:
-
+    void addNewFrame(void);
     //- Mutex
     yat::Mutex                  lock_;
     yat::Mutex                  contextual_lock_;
