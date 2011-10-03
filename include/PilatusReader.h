@@ -58,9 +58,13 @@ class Reader : public yat::Task
     Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl);
     virtual ~Reader();
 
+    //start periodic reader task
     void start();
+    //start periodic reader task
     void stop();
+    //NOP
     void reset();
+    //return the number of acquired images
     int  getLastAcquiredFrame(void);
 
   //- [yat::Task implementation]
@@ -68,17 +72,21 @@ class Reader : public yat::Task
     virtual void handle_message( yat::Message& msg )    throw (yat::Exception);
 
  private:
-    void addNewFrame(void);
+    //notify Lima that a new frame is ready (it's a simulated frame filled with 0 )
+    void 						addNewFrame(void);
     //- Mutex
     yat::Mutex                  lock_;
     yat::Mutex                  contextual_lock_;
     Camera&              		m_cam;
-    bool						m_use_dw;
     HwBufferCtrlObj&            m_buffer;
     int                         m_image_number;
     bool                        m_stop_already_done;
     unsigned                    m_elapsed_seconds_from_stop;
+    
+    //monitoring a directory located at imagePath
+    bool						m_use_dw;
     gdshare::DirectoryWatcher*  m_dw;
+    
     //simulate an image !
     uint32_t*                   m_image;
     Size                        m_image_size;
