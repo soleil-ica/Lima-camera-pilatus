@@ -84,6 +84,7 @@ class Interface(Core.HwInterface) :
     def stopAcq(self) :
         self.__comm.stop_acquisition()
         self.__buffer.stop()
+        self.__acquisition_start_flag = False
         
     @Core.DEB_MEMBER_FUNCT
     def getStatus(self) :
@@ -125,3 +126,7 @@ class Interface(Core.HwInterface) :
     #get lower communication
     def communication(self) :
         return self.__comm
+
+    #get lower buffer
+    def buffer(self) :
+        return self.__buffer
