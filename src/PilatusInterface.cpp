@@ -124,7 +124,7 @@ BufferCtrlObj::BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det)
 BufferCtrlObj::~BufferCtrlObj()
 {
     DEB_DESTRUCTOR();
-    m_reader->stop();
+	m_reader->stop(true);
     m_reader->exit();
 }
 
@@ -162,7 +162,7 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
     DEB_MEMBER_FUNCT();
-    m_reader->stop();
+	m_reader->stop(false);
 }
 
 //-----------------------------------------------------

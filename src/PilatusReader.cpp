@@ -12,13 +12,19 @@
 //- Ctor
 //---------------------------
 Reader::Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl) :
-		m_cam(cam), m_buffer(buffer_ctrl), m_stop_already_done(true), m_image_size(PILATUS_6M_WIDTH, PILATUS_6M_HEIGHT), m_dw(0), m_use_dw(true)
+		m_cam(cam), m_buffer(buffer_ctrl)
 {
 	DEB_CONSTRUCTOR();
 	try
 	{
-		m_use_dw = m_cam.isDirectoryWatcherEnabled();
+		m_stop_done = true;
+		m_image_size = Size(PILATUS_6M_WIDTH, PILATUS_6M_HEIGHT);
+		m_dw = 0;
+		m_use_dw = true;
 		m_image_number = 0;
+		m_time_out_watcher = 0;
+		m_is_running = false;
+		m_use_dw = m_cam.isDirectoryWatcherEnabled();
 		enable_timeout_msg(false);
 		enable_periodic_msg(false);
 		set_periodic_msg_period(kTASK_PERIODIC_TIMEOUT_MS);
@@ -80,6 +86,12 @@ void Reader::start()
 
 		this->post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
 	}
+	catch (Exception &e)
+	{
+		// Error handling
+		DEB_ERROR() << e.getErrMsg();
+		throw LIMA_HW_EXC(Error, e.getErrMsg());
+	}
 	catch (yat::Exception &ex)
 	{
 		// Error handling
@@ -91,17 +103,14 @@ void Reader::start()
 //---------------------------
 //- Reader::stop()
 //---------------------------
-void Reader::stop()
+void Reader::stop(bool immediatley)
 {
 	DEB_MEMBER_FUNCT();
 	try
 	{
-		if (m_dw != 0)
-		{
-			delete m_dw;
-			m_dw = 0;
-		}
-		this->post(new yat::Message(PILATUS_STOP_MSG), kPOST_MSG_TMO);
+		yat::Message* msg = new yat::Message(PILATUS_STOP_MSG);
+		msg->attach_data((bool) immediatley);
+		this->post(msg, kPOST_MSG_TMO);
 	}
 	catch (yat::Exception& ex)
 	{
@@ -135,8 +144,28 @@ void Reader::reset()
 int Reader::getLastAcquiredFrame(void)
 {
 	DEB_MEMBER_FUNCT();
-	yat::MutexLock scoped_lock(contextual_lock_);
+	yat::MutexLock scoped_lock(lock_);
 	return m_image_number;
+}
+
+//---------------------------
+//- Reader::isTimeoutSignaled()
+//---------------------------
+bool Reader::isTimeoutSignaled()
+{
+	DEB_MEMBER_FUNCT();
+	yat::MutexLock scoped_lock(lock_);
+	return (m_elapsed_ms_from_stop>=TIME_OUT_WATCHER)?true:false;
+}
+
+//---------------------------
+//- Reader::isRunning()
+//---------------------------
+bool Reader::isRunning(void)
+{
+	DEB_MEMBER_FUNCT();
+	yat::MutexLock scoped_lock(lock_);
+	return m_is_running;
 }
 
 //-----------------------------------------------------
@@ -171,15 +200,24 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 			case yat::TASK_PERIODIC:
 			{
 				DEB_TRACE() << "Reader::->TASK_PERIODIC";
-				if (m_stop_already_done)
+				if (m_stop_done)
 				{
-					if (m_elapsed_seconds_from_stop >= 0) //disable TO
+					if (m_elapsed_ms_from_stop >= m_time_out_watcher) // TO
 					{
 						enable_periodic_msg(false);
+						if (m_dw != 0)
+						{
+							delete m_dw;
+							m_dw = 0;
+						}
+						yat::MutexLock scoped_lock(lock_);
+						{
+							m_is_running = false;
+						}
 						return;
 					}
-					m_elapsed_seconds_from_stop++;
-					DEB_TRACE() << "Elapsed seconds since stop() = " << m_elapsed_seconds_from_stop << " s";
+					m_elapsed_ms_from_stop+=kTASK_PERIODIC_TIMEOUT_MS;
+					DEB_TRACE() << "Elapsed time since stop() = " << m_elapsed_ms_from_stop << " ms";
 				}
 
 				if(m_use_dw)
@@ -213,6 +251,7 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 						DEB_TRACE() << "Exposure SUCCEDED received from CamServer !";//all images (nbImagesInSequence()) are acquired !
 						for(int i =0; i<m_cam.nbImagesInSequence();i++)
 						{
+							DEB_TRACE() << "file : " << "SIMULATED("<<i<<")";
 							addNewFrame();
 						}
 					}
@@ -223,9 +262,13 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 			case PILATUS_START_MSG:
 			{
 				DEB_TRACE() << "Reader::->PILATUS_START_MSG";
-				m_image_number = 0;
-				m_elapsed_seconds_from_stop = 1;
-				m_stop_already_done = false;
+				yat::MutexLock scoped_lock(lock_);
+				{
+					m_is_running = true;
+					m_image_number = 0;
+					m_elapsed_ms_from_stop = 0;
+					m_stop_done = false;
+				}
 				enable_periodic_msg(true);
 			}
 			break;
@@ -233,10 +276,15 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 			case PILATUS_STOP_MSG:
 			{
 				DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
-				if (!m_stop_already_done)
+				bool bStopImediatley = msg.get_data<bool>();
+				if (bStopImediatley)
+					m_time_out_watcher = 0;
+				else
+					m_time_out_watcher = TIME_OUT_WATCHER;
+				if (!m_stop_done)//reset the counter, only at first call of stop()
 				{
-					m_elapsed_seconds_from_stop = 1;
-					m_stop_already_done = true;
+					m_elapsed_ms_from_stop = 0;
+					m_stop_done = true;
 				}
 			}
 			break;
@@ -274,8 +322,10 @@ void Reader::addNewFrame(void)
 		buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
 
 		//simulate an image !
-		DEB_TRACE() << "-- copy image in buffer";
+		DEB_TRACE() << "-- prepare image buffer";
 		void *ptr = buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
+
+		DEB_TRACE() << "-- copy image in buffer";
 		memcpy((uint32_t *) ptr, (uint32_t *) (m_image), m_image_size.getWidth() * m_image_size.getHeight() * 4); //*4 because 32bits
 
 		DEB_TRACE() << "-- newFrameReady";
@@ -286,13 +336,15 @@ void Reader::addNewFrame(void)
 		// if nb acquired image < requested frames
 		if (continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
 		{
-			yat::MutexLock scoped_lock(contextual_lock_);
+			yat::MutexLock scoped_lock(lock_);
 			{
+				DEB_TRACE() << "-- increase image_number";
 				m_image_number++;
 			}
 		}
 		else
 		{
+			DEB_TRACE() << "-- stop monitoring immediately";
 			stop();
 		}
 	}
