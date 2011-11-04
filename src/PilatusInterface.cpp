@@ -124,7 +124,7 @@ BufferCtrlObj::BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det)
 BufferCtrlObj::~BufferCtrlObj()
 {
     DEB_DESTRUCTOR();
-    m_reader->stop();
+	m_reader->stop(true);
     m_reader->exit();
 }
 
@@ -162,7 +162,7 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
     DEB_MEMBER_FUNCT();
-    m_reader->stop();
+	m_reader->stop(false);
 }
 
 //-----------------------------------------------------
@@ -325,6 +325,7 @@ bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
 
     default:
         valid_mode = false;
+        break;
     }
     return valid_mode;
 }
@@ -695,8 +696,13 @@ Camera::Gain Interface::getGain(void)
 }
 
 //-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Interface::sendAnyCommand(const std::string& str)
 {
     m_cam.sendAnyCommand(str);
 }
+
+//-----------------------------------------------------
+//
 //-----------------------------------------------------

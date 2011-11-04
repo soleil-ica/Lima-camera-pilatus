@@ -12,11 +12,12 @@
 
 #define kPOST_MSG_TMO       2
 
-#define kTASK_PERIODIC_TIMEOUT_MS   1000
+#define kTASK_PERIODIC_TIMEOUT_MS    200
 const size_t  PILATUS_START_MSG     =   (yat::FIRST_USER_MSG + 300);
 const size_t  PILATUS_STOP_MSG      =   (yat::FIRST_USER_MSG + 301);
 const size_t  PILATUS_RESET_MSG     =   (yat::FIRST_USER_MSG + 302);
 
+#define TIME_OUT_WATCHER    20*kTASK_PERIODIC_TIMEOUT_MS
 ///////////////////////////////////////////////////////////
 
 
@@ -56,28 +57,41 @@ class Reader : public yat::Task
  public:
 
     Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl);
-    ~Reader();
+    virtual ~Reader();
 
+    //start periodic reader task
     void start();
-    void stop();
+    //start periodic reader task
+    void stop(bool immediateley = true);
+    //NOP
     void reset();
+    //return the number of acquired images
     int  getLastAcquiredFrame(void);
+    //return true if Monitoring is end with a time out
+    bool isTimeoutSignaled(void);
+    //return teh state of monitoring files
+    bool isRunning(void);
 
   //- [yat::Task implementation]
   protected: 
     virtual void handle_message( yat::Message& msg )    throw (yat::Exception);
 
  private:
-
+    //notify Lima that a new frame is ready (it's a simulated frame filled with 0 )
+    void 						addNewFrame(void);
     //- Mutex
     yat::Mutex                  lock_;
-    yat::Mutex                  contextual_lock_;
-    Camera&              m_cam;
+    Camera&              		m_cam;
     HwBufferCtrlObj&            m_buffer;
     int                         m_image_number;
-    bool                        m_stop_already_done;
-    unsigned                    m_elapsed_seconds_from_stop;
+    bool                        m_stop_done;
+    unsigned                    m_elapsed_ms_from_stop;
+    int                         m_time_out_watcher;
+    bool 						m_is_running;
+    //monitoring a directory located at imagePath
+    bool						m_use_dw;
     gdshare::DirectoryWatcher*  m_dw;
+    
     //simulate an image !
     uint32_t*                   m_image;
     Size                        m_image_size;

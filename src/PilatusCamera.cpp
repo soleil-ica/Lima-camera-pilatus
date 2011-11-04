@@ -78,6 +78,8 @@ Camera::Camera(const char *host,int port)
                 :   m_socket(-1),
                     m_stop(false),
                     m_thread_id(0),
+                    m_use_dw(true),
+                    m_nb_acquired_images(0),
                     m_state(DISCONNECTED)
 {
     DEB_CONSTRUCTOR();
@@ -100,8 +102,9 @@ Camera::~Camera()
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
+    m_nb_acquired_images = 0;
     m_stop = true;
-    if(m_socket >= 0)
+    if(m_socket >=-1)
     {
         close(m_socket);
         std::cout<<"close = "<<close(m_socket)<<std::endl;    
@@ -153,6 +156,7 @@ void Camera::_initVariable()
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
     m_exposure_per_frame                = 1;
+    m_nb_acquired_images 				= 0;
 
     GAIN_SERVER_RESPONSE["low"]         = LOW;
     GAIN_SERVER_RESPONSE["mid"]         = MID;
@@ -457,6 +461,7 @@ void Camera::_run()
                         {
                             DEB_TRACE() << "-- Exposure succeeded";
                             m_state = Camera::STANDBY;
+                            m_nb_acquired_images = m_nimages;
                             std::string real_message = msg.substr(5);
                         }
                         else
@@ -498,6 +503,36 @@ void Camera::_run()
             }
         }
     }
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+bool Camera::isDirectoryWatcherEnabled()
+{
+    DEB_MEMBER_FUNCT();
+    AutoMutex aLock(m_cond.mutex());
+    return m_use_dw;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::enableDirectoryWatcher()
+{
+    DEB_MEMBER_FUNCT();
+    AutoMutex aLock(m_cond.mutex());
+    m_use_dw = true;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::disableDirectoryWatcher()
+{
+    DEB_MEMBER_FUNCT();
+    AutoMutex aLock(m_cond.mutex());
+    m_use_dw = false;
 }
 
 //-----------------------------------------------------
@@ -783,6 +818,7 @@ void Camera::startAcquisition(int image_number)
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
+    m_nb_acquired_images = 0;
     if(m_state == Camera::RUNNING)
         THROW_HW_ERROR(Error) << "Could not start acquisition, you have to wait the end of the previous one";
 
@@ -878,6 +914,17 @@ void Camera::sendAnyCommand(const std::string& message)
     WAIT_UNTIL(Camera::STANDBY,"Could not send the Command, server is not idle");
 
     send(message);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+int Camera::nbAcquiredImages()
+{
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex aLock(m_cond.mutex());
+    return m_nb_acquired_images;
 }
 
 //-----------------------------------------------------
