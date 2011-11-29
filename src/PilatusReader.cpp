@@ -21,7 +21,7 @@ Reader::Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl) :
 		m_image_size = Size(PILATUS_6M_WIDTH, PILATUS_6M_HEIGHT);
 		m_dw = 0;
 		m_use_dw = true;
-		m_image_number = 0;
+		m_image_number = -1;
 		m_time_out_watcher = 0;
 		m_is_running = false;
 		m_use_dw = m_cam.isDirectoryWatcherEnabled();
@@ -233,6 +233,10 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 						copy(vecNewFiles.begin(), vecNewFiles.end(), vecNewAndChangedFiles.begin());
 						copy(vecChangedFiles.begin(), vecChangedFiles.end(), vecNewAndChangedFiles.begin()+vecNewFiles.size());
 
+						//initialisze image_number when first image arrived
+						if(vecNewAndChangedFiles.size()>0 && m_image_number == -1)
+							m_image_number = 0;
+
 						//foreach new or changed file in the watched directory, frame is incremented and an image is copied to the frame ptr
 						for (int i = 0; i < vecNewAndChangedFiles.size(); i++)
 						{
@@ -249,6 +253,11 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 					if(m_cam.nbAcquiredImages()!=0)
 					{
 						DEB_TRACE() << "Exposure SUCCEDED received from CamServer !";//all images (nbImagesInSequence()) are acquired !
+
+						//initialisze image_number when first image arrived
+						if(m_image_number == -1)
+  						m_image_number = 0;
+  						
 						for(int i =0; i<m_cam.nbImagesInSequence();i++)
 						{
 							DEB_TRACE() << "file : " << "SIMULATED("<<i<<")";
@@ -265,7 +274,7 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 				yat::MutexLock scoped_lock(lock_);
 				{
 					m_is_running = true;
-					m_image_number = 0;
+					m_image_number = -1;
 					m_elapsed_ms_from_stop = 0;
 					m_stop_done = false;
 				}
@@ -326,7 +335,8 @@ void Reader::addNewFrame(void)
 		void *ptr = buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
 
 		DEB_TRACE() << "-- copy image in buffer";
-		memcpy((uint32_t *) ptr, (uint32_t *) (m_image), m_image_size.getWidth() * m_image_size.getHeight() * 4); //*4 because 32bits
+		////memcpy((uint32_t *) ptr, (uint32_t *) (m_image), m_image_size.getWidth() * m_image_size.getHeight() * 4); //*4 because 32bits
+		yat::ThreadingUtilities::sleep(0, 5000000); //5 ms
 
 		DEB_TRACE() << "-- newFrameReady";
 		HwFrameInfoType frame_info;

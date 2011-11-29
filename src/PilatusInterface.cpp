@@ -626,7 +626,7 @@ double Interface::getLatency(void)
    return latency;   
 }
     
-    
+
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -701,6 +701,21 @@ Camera::Gain Interface::getGain(void)
 void Interface::sendAnyCommand(const std::string& str)
 {
     m_cam.sendAnyCommand(str);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setEnergy(double energy)
+{
+	m_cam.setEnergy(energy);
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double Interface::getEnergy(void)
+{
+    return m_cam.energy();
 }
 
 //-----------------------------------------------------

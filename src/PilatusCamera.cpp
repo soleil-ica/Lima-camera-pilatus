@@ -104,13 +104,17 @@ Camera::~Camera()
     AutoMutex aLock(m_cond.mutex());
     m_nb_acquired_images = 0;
     m_stop = true;
-    if(m_socket >=-1)
+    if(m_socket >=0)
     {
-        close(m_socket);
-        std::cout<<"close = "<<close(m_socket)<<std::endl;    
+      write(m_pipes[1],"|",1);
+      ///close(m_socket);
+      shutdown(m_socket,2);
+      m_socket = -1;
     }
     else
+    {
         write(m_pipes[1],"|",1);
+    }
     aLock.unlock();
 
     void *returnPt;
@@ -152,6 +156,7 @@ void Camera::_initVariable()
     m_threshold                         = -1;
     m_gain                              = DEFAULT_GAIN;
     m_exposure                          = -1.;
+    m_energy	                        = -1.;
     m_nimages                           = 1;
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
@@ -182,10 +187,13 @@ void Camera::connect(const char *host,int port)
     {
         AutoMutex aLock(m_cond.mutex());
         if(m_socket >= 0)
+        {
             close(m_socket);
+            m_socket = -1;
+        }
         else
         {
-            m_socket = socket(AF_INET, SOCK_STREAM,0);
+            m_socket = socket(PF_INET, SOCK_STREAM,IPPROTO_TCP);
             if(m_socket >= 0)
             {
                 int flag = 1;
@@ -387,7 +395,14 @@ void Camera::_run()
                             }
                             else if(real_message.find("/tmp/setthreshold")!=std::string::npos)
                             {
-                                DEB_TRACE() << "-- Threshold process succeeded";
+                                if(m_state == Camera::SETTING_THRESHOLD)
+                                {
+                                  DEB_TRACE() << "-- Threshold process succeeded";
+                                }
+                                if(m_state == Camera::SETTING_ENERGY)
+                                {
+                                  DEB_TRACE() << "-- SetEnergy process succeeded";
+                                }
                                 m_state = Camera::STANDBY;
                                 _reinit(); // resync with server
                             }
@@ -428,6 +443,8 @@ void Camera::_run()
                             
                             if(m_state == Camera::SETTING_THRESHOLD) 
                               m_state = Camera::STANDBY;                           
+                            if(m_state == Camera::SETTING_ENERGY) 
+                              m_state = Camera::STANDBY;                                 
                         }
                         else  // ERROR MESSAGE
                         {
@@ -436,6 +453,11 @@ void Camera::_run()
                                 m_state = Camera::ERROR;
                                 DEB_TRACE() << "-- Threshold process failed";
                             }
+                            if(m_state == Camera::SETTING_ENERGY)
+                            {
+                                m_state = Camera::ERROR;
+                                DEB_TRACE() << "-- SetEnergy process failed";
+                            }                            
                             else if(m_state == Camera::RUNNING)
                             {
                                 m_state = Camera::ERROR;
@@ -614,6 +636,31 @@ void Camera::hardReset()
 {
     AutoMutex aLock(m_cond.mutex());
     send("resetcam");
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double Camera::energy() const
+{
+    AutoMutex aLock(m_cond.mutex());
+    return m_threshold;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setEnergy(double val)
+{
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex aLock(m_cond.mutex());
+    WAIT_UNTIL(Camera::STANDBY,"Could not set energy, server is not idle");
+    m_state = Camera::SETTING_ENERGY;
+    std::stringstream msg;
+    msg << "setenergy " << val;
+    send(msg.str());
+
 }
 
 //-----------------------------------------------------
