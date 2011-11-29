@@ -189,6 +189,8 @@ public:
 	void setFileName(const std::string& name);
 	const std::string& getFileName(void);
 
+	void setEnergy(double energy);
+	double getEnergy(void);
 	void setMxSettings(const std::string& str);
 	void setThresholdGain(int threshold, Camera::Gain gain);
 	int getThreshold(void);

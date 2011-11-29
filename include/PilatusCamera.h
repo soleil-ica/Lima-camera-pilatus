@@ -21,6 +21,7 @@ public:
         ERROR,
         DISCONNECTED,
         OK,
+        SETTING_ENERGY,
         SETTING_THRESHOLD,
         SETTING_EXPOSURE,
         SETTING_NB_IMAGE_IN_SEQUENCE,
@@ -70,6 +71,9 @@ public:
     const std::string& fileName(void);
     
     Status status() const;
+
+    double energy() const;
+    void setEnergy(double val);
 
     int threshold() const;
     Gain gain() const;
@@ -139,6 +143,7 @@ private:
     //Cache variables
     bool 					m_use_dw;
     std::string             m_error_message;
+    double                  m_energy;
     double                  m_exposure;
     int                     m_exposure_per_frame;
     double                  m_exposure_period;
