@@ -121,7 +121,7 @@ class _ImageReader(threading.Thread) :
                 newDirectoryTime = os.fstat(self.__dirFd).st_mtime
                 while(self.__waitFlag or
                       (self.__continue and lastDirectoryTime == newDirectoryTime)):
-                    self.__cond.wait(0.5)
+                    self.__cond.wait(0.1)
                     newDirectoryTime = os.fstat(self.__dirFd).st_mtime
                 while(self.__continue and not self.__waitFlag) :
                     nextFrameId = self.__lastImageRead + 1
@@ -146,7 +146,7 @@ class _ImageReader(threading.Thread) :
                                 continueFlag = buffer_ctrl._cbk.newFrameReady(hw_frame_info)
                                 
                             del data
-
+                            del f
                             #remove old image from buffer (tmp_fs)
                             idImage2remove = nextFrameId - buffer_ctrl.getNbBuffers()
                             if idImage2remove >= 0 :
@@ -194,6 +194,7 @@ class BufferCtrlObj(Core.HwBufferCtrlObj):
             self.__det_info = weakref.ref(det_info)
             self._cbk = None
             self.__nb_buffer = 1
+            self.__tmpfs_size = comm_object.DEFAULT_TMPFS_SIZE
             self.__imageReader = _ImageReader(self)
             self.__imageReader.start()
 
@@ -236,7 +237,7 @@ class BufferCtrlObj(Core.HwBufferCtrlObj):
         @Core.DEB_MEMBER_FUNCT
         def setNbConcatFrames(self,nb_concat_frames) :
             if nb_concat_frames != 1:
-                raise Core.Exceptions(Core.Hardware,Core.NotSupported)
+                raise Core.Exception(Core.Hardware,Core.NotSupported)
 
         @Core.DEB_MEMBER_FUNCT
         def getNbConcatFrames(self) :
@@ -251,14 +252,23 @@ class BufferCtrlObj(Core.HwBufferCtrlObj):
 	def getNbAccFrames(self) :
             com = self._com()
             return com.nb_exposure_per_frame()
-        
+
+        @Core.DEB_MEMBER_FUNCT
+        def setTmpfsSize(self, new_size):
+            det_info = self.__det_info()
+            imageFormat = det_info.getMaxImageSize()
+            imageSize = imageFormat.getWidth() * imageFormat.getHeight() * 4
+            if new_size / 2 < imageSize:
+                raise Core.Exception(Core.Hardware,Core.InvalidValue)
+            self.__tmpfs_size = new_size
+            
         @Core.DEB_MEMBER_FUNCT
         def getMaxNbBuffers(self) :
             com = self._com()
             det_info = self.__det_info()
             imageFormat = det_info.getMaxImageSize()
             imageSize = imageFormat.getWidth() * imageFormat.getHeight() * 4 # 4 == image 32bits
-            return com.DEFAULT_TMPFS_SIZE / imageSize / 2.
+            return self.__tmpfs_size / imageSize / 2.
 
         @Core.DEB_MEMBER_FUNCT
         def getBufferPtr(self,buffer_nb,concat_frame_nb = 0) :
