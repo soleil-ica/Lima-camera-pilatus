@@ -6,6 +6,7 @@
 // YAT::TASK 
 ///////////////////////////////////////////////////////////
 #include <yat/threading/Task.h>
+#include <yat/file/FileName.h>
 
 #define kLO_WATER_MARK      128
 #define kHI_WATER_MARK      512
@@ -26,8 +27,6 @@ const size_t  PILATUS_RESET_MSG     =   (yat::FIRST_USER_MSG + 302);
 
 #include "Debug.h"
 #include "Data.h"
-#include <base.h>
-#include <file.h>
 
 #include "HwMaxImageSizeCallback.h"
 #include "PilatusCamera.h"
@@ -88,9 +87,10 @@ class Reader : public yat::Task
     unsigned                    m_elapsed_ms_from_stop;
     int                         m_time_out_watcher;
     bool 						m_is_running;
+    bool						m_stop_immediatley;
     //monitoring a directory located at imagePath
     bool						m_use_dw;
-    gdshare::DirectoryWatcher*  m_dw;
+    yat::DirectoryWatcher*  	m_dw;
     
     //simulate an image !
     uint32_t*                   m_image;

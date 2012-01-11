@@ -360,6 +360,8 @@ void Camera::_run()
             }
             else
             {                
+                if(m_state == Camera::ERROR)//nothing to do, keep last error until a new explicit user command (start, stop, setenergy, ...)
+                  continue;
                 std::string strMessages(messages,aMessageSize );                    
                 DEB_TRACE() << "<< messages = "<<strMessages;
                 std::vector<std::string> msg_vector;
@@ -920,7 +922,7 @@ void Camera::startAcquisition(int image_number)
 void Camera::stopAcquisition()
 {
     AutoMutex aLock(m_cond.mutex());
-    ////if(m_state == Camera::RUNNING)
+    if(m_state == Camera::RUNNING)
     {
         m_state = Camera::KILL_ACQUISITION;
         send("k");

@@ -82,7 +82,7 @@ void Reader::start()
 		}
 
 		if(m_use_dw)
-			m_dw = new gdshare::DirectoryWatcher(m_cam.imgpath());
+			m_dw = new yat::DirectoryWatcher(m_cam.imgpath());
 
 		this->post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
 	}
@@ -108,6 +108,7 @@ void Reader::stop(bool immediatley)
 	DEB_MEMBER_FUNCT();
 	try
 	{
+		m_stop_immediatley = immediatley;
 		yat::Message* msg = new yat::Message(PILATUS_STOP_MSG);
 		msg->attach_data((bool) immediatley);
 		this->post(msg, kPOST_MSG_TMO);
@@ -225,8 +226,8 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 					if (m_dw)
 					{
 						//get new created or changed files in the imagepath directory
-						gdshare::FileNamePtrVector vecNewFiles, vecChangedFiles, vecNewAndChangedFiles;
-						m_dw->GetChanges(&vecNewFiles, &vecChangedFiles);
+						yat::DirectoryWatcher::FileNamePtrVector vecNewFiles, vecChangedFiles, vecNewAndChangedFiles;
+						m_dw->get_changes(&vecNewFiles, &vecChangedFiles);
 						vecNewAndChangedFiles.resize(vecNewFiles.size()+vecChangedFiles.size());
 
 						//concatenation
@@ -240,9 +241,9 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 						//foreach new or changed file in the watched directory, frame is incremented and an image is copied to the frame ptr
 						for (int i = 0; i < vecNewAndChangedFiles.size(); i++)
 						{
-							if (vecNewAndChangedFiles.at(i)->FileExists())
+							if (vecNewAndChangedFiles.at(i)->file_exist())
 							{
-								DEB_TRACE() << "file : " << vecNewAndChangedFiles.at(i)->NameExt();
+								DEB_TRACE() << "file : " << vecNewAndChangedFiles.at(i)->name_ext();
 								addNewFrame();
 							}
 						}
@@ -250,17 +251,14 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 				}
 				else // use response of camserver at end of exposure to increment nb_frame once for all
 				{
-					if(m_cam.nbAcquiredImages()!=0)
+					if(m_cam.nbAcquiredImages()!=0 && !m_stop_immediatley )
 					{
-						DEB_TRACE() << "Exposure SUCCEDED received from CamServer !";//all images (nbImagesInSequence()) are acquired !
+						DEB_TRACE() << "Exposure SUCCEEDED received from CamServer !";//all images (nbImagesInSequence()) are acquired !
 
-						//initialisze image_number when first image arrived
-						if(m_image_number == -1)
-  						m_image_number = 0;
-  						
 						for(int i =0; i<m_cam.nbImagesInSequence();i++)
 						{
-							DEB_TRACE() << "file : " << "SIMULATED("<<i<<")";
+							if(m_stop_immediatley)
+								break;
 							addNewFrame();
 						}
 					}
@@ -273,8 +271,10 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 				DEB_TRACE() << "Reader::->PILATUS_START_MSG";
 				yat::MutexLock scoped_lock(lock_);
 				{
+					m_stop_immediatley = false;
 					m_is_running = true;
-					m_image_number = -1;
+					//initialisze image_number when first image arrived					
+					m_image_number = 0;
 					m_elapsed_ms_from_stop = 0;
 					m_stop_done = false;
 				}
@@ -285,8 +285,8 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 			case PILATUS_STOP_MSG:
 			{
 				DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
-				bool bStopImediatley = msg.get_data<bool>();
-				if (bStopImediatley)
+				////m_stop_immediatley = msg.get_data<bool>();
+				if (m_stop_immediatley)
 					m_time_out_watcher = 0;
 				else
 					m_time_out_watcher = TIME_OUT_WATCHER;
@@ -325,7 +325,7 @@ void Reader::addNewFrame(void)
 		StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
 		bool continueAcq = false;
 		int buffer_nb, concat_frame_nb;
-
+		DEB_TRACE() << "file : " << "SIMULATED("<<m_image_number<<")";
 		DEB_TRACE() << "image#" << m_image_number << " acquired !";
 		buffer_mgr.setStartTimestamp(Timestamp::now());
 		buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
@@ -341,9 +341,13 @@ void Reader::addNewFrame(void)
 		DEB_TRACE() << "-- newFrameReady";
 		HwFrameInfoType frame_info;
 		frame_info.acq_frame_nb = m_image_number;
-		continueAcq = buffer_mgr.newFrameReady(frame_info);
-
+		if(!m_stop_immediatley)
+			continueAcq = buffer_mgr.newFrameReady(frame_info);
+		else
+			continueAcq = false;
 		// if nb acquired image < requested frames
+		DEB_TRACE() << "-- continueAcq = "<<continueAcq;
+		DEB_TRACE() << "-- m_image_number = "<<m_image_number;
 		if (continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
 		{
 			yat::MutexLock scoped_lock(lock_);
@@ -355,7 +359,7 @@ void Reader::addNewFrame(void)
 		else
 		{
 			DEB_TRACE() << "-- stop monitoring immediately";
-			stop();
+			stop(true);
 		}
 	}
 	catch (yat::Exception& ex)

@@ -162,7 +162,7 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
     DEB_MEMBER_FUNCT();
-	m_reader->stop(false);
+	m_reader->stop(true);
 }
 
 //-----------------------------------------------------
@@ -541,7 +541,7 @@ void Interface::prepareAcq()
 //-----------------------------------------------------
 void Interface::startAcq()
 {
-    DEB_MEMBER_FUNCT();
+    DEB_MEMBER_FUNCT();  
     m_cam.startAcquisition();
     m_buffer.start();
 }
@@ -552,8 +552,9 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
     DEB_MEMBER_FUNCT();
+    m_buffer.stop();    
     m_cam.stopAcquisition();
-    m_buffer.stop();
+
 }
 
 //-----------------------------------------------------
