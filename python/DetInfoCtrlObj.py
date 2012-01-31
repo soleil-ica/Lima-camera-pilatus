@@ -76,7 +76,7 @@ class DetInfoCtrlObj(Core.HwDetInfoCtrlObj) :
     
     #@Core.Debug.DEB_MEMBER_FUNCT
     def getPixelSize(self) :
-        return 172e-6
+        return 172e-6,172e-6
 
     #@Core.Debug.DEB_MEMBER_FUNCT
     def getDetectorType(self) :

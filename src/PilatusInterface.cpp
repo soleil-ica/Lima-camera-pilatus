@@ -77,11 +77,10 @@ void DetInfoCtrlObj::setCurrImageType(ImageType image_type)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void DetInfoCtrlObj::getPixelSize(double& x_size,double &y_size)
+void DetInfoCtrlObj::getPixelSize(double& x_size,double& y_size)
 {
     DEB_MEMBER_FUNCT();
-    x_size= 172.0;
-    y_size= 172.0;
+    x_size = y_size = 172.0;
 }
 
 //-----------------------------------------------------
@@ -568,20 +567,16 @@ void Interface::getStatus(StatusType& status)
     Camera::Status cam_status = Camera::STANDBY;
     cam_status = m_cam.status();
 
-    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION || cam_status == Camera::OK)
+    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION)
     {
-	status.det = DetIdle;
+        status.det = DetIdle;
 
         int nbFrames = 0;
         m_sync.getNbHwFrames(nbFrames);
-        if(getNbHwAcquiredFrames() >= nbFrames || cam_status == Camera::OK)
-	{
+        if(getNbHwAcquiredFrames() >= nbFrames)
             status.acq = AcqReady;        
-	}
         else
-	{
             status.acq = AcqRunning;
-	}
 
         status.acq = AcqReady; 
     }
