@@ -48,7 +48,7 @@ using namespace lima::Pilatus;
 
 
 
-#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Camera::ERROR)    \
+#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Camera::ERROR && m_state != Camera::OK)    \
 {                                                                   \
   if(!m_cond.wait(TIME_OUT))                                        \
     THROW_HW_ERROR(lima::Error) << errmsg;                          \
@@ -161,7 +161,7 @@ void Camera::_initVariable()
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
     m_exposure_per_frame                = 1;
-    m_nb_acquired_images 				= 0;
+    m_nb_acquired_images 		= 0;
 
     GAIN_SERVER_RESPONSE["low"]         = LOW;
     GAIN_SERVER_RESPONSE["mid"]         = MID;
@@ -512,7 +512,7 @@ void Camera::_run()
                         {
                             DEB_TRACE() << "-- imgpath setting succeeded";
                             ////m_imgpath = msg.substr(6);////@@@@
-                            m_state = Camera::STANDBY;
+                            m_state = Camera::OK;
                         }
                         else
                         {
@@ -567,6 +567,7 @@ void Camera::setImgpath(const std::string& path)
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
     WAIT_UNTIL(Camera::STANDBY,"Could not set imgpath, server not idle");
+    m_state = Camera::OK;//need to reset the state FAULT in order to avoid a problem on proxima1 datacollector
     m_imgpath = path;    
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;

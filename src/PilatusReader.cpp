@@ -200,7 +200,7 @@ void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
 			//-----------------------------------------------------
 			case yat::TASK_PERIODIC:
 			{
-				DEB_TRACE() << "Reader::->TASK_PERIODIC";
+				////DEB_TRACE() << "Reader::->TASK_PERIODIC";
 				if (m_stop_done)
 				{
 					if (m_elapsed_ms_from_stop >= m_time_out_watcher) // TO

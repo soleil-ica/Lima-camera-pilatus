@@ -567,16 +567,20 @@ void Interface::getStatus(StatusType& status)
     Camera::Status cam_status = Camera::STANDBY;
     cam_status = m_cam.status();
 
-    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION)
+    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION || cam_status == Camera::OK)
     {
-        status.det = DetIdle;
+	status.det = DetIdle;
 
         int nbFrames = 0;
         m_sync.getNbHwFrames(nbFrames);
-        if(getNbHwAcquiredFrames() >= nbFrames)
+        if(getNbHwAcquiredFrames() >= nbFrames || cam_status == Camera::OK)
+	{
             status.acq = AcqReady;        
+	}
         else
+	{
             status.acq = AcqRunning;
+	}
 
         status.acq = AcqReady; 
     }
