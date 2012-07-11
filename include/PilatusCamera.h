@@ -4,8 +4,6 @@
 #include "Debug.h"
 
 
-static const char  SOCKET_SEPARATOR = '\030';
-static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
 
 namespace lima
 {
@@ -20,7 +18,7 @@ public:
     {
         ERROR,
         DISCONNECTED,
-        OK,
+        STANDBY,
         SETTING_ENERGY,
         SETTING_THRESHOLD,
         SETTING_EXPOSURE,
@@ -29,9 +27,7 @@ public:
         SETTING_HARDWARE_TRIGGER_DELAY,
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
-        RUNNING,
-        ANY,
-        STANDBY
+        RUNNING
     };
 
     enum Gain
@@ -57,12 +53,8 @@ public:
     
     void connect(const char* host,int port);
     
-    std::string serverIP() const;
+    const char* serverIP() const;
     int serverPort() const;
-    
-	void enableDirectoryWatcher(void);
-	void disableDirectoryWatcher(void);
-	bool isDirectoryWatcherEnabled();
 
     void setImgpath(const std::string& path);
     const std::string& imgpath(void);
@@ -141,7 +133,6 @@ private:
     mutable Cond            m_cond;
 
     //Cache variables
-    bool 					m_use_dw;
     std::string             m_error_message;
     double                  m_energy;
     double                  m_exposure;

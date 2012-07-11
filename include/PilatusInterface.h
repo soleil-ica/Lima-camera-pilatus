@@ -4,17 +4,7 @@
 #include "HwInterface.h"
 #include "HwBufferMgr.h"
 #include "Debug.h"
-#include "Data.h"
 #include "PilatusCamera.h"
-#include "PilatusReader.h"
-
-using namespace lima;
-using namespace lima::Pilatus;
-using namespace std;
-
-#define LATENCY_DEFAULT_VALUE          0.003
-#define PILATUS_6M_WIDTH                2463
-#define PILATUS_6M_HEIGHT               2527
 
 namespace lima
 {
@@ -32,7 +22,12 @@ class DetInfoCtrlObj: public HwDetInfoCtrlObj
 DEB_CLASS_NAMESPC(DebModCamera, "DetInfoCtrlObj", "Pilatus");
 
 public:
-	DetInfoCtrlObj(Camera& cam);
+	struct Info
+	{
+	  Size		m_det_size;
+	  std::string 	m_det_model;
+	};
+	DetInfoCtrlObj(const Info* = NULL);
 	virtual ~DetInfoCtrlObj();
 
 	virtual void getMaxImageSize(Size& max_image_size);
@@ -57,8 +52,9 @@ public:
 	}
 	;
 
+	double getMinLatTime() const {return 3e-3;}
 private:
-	Camera& m_cam;
+	Info	m_info;
 };
 
 /*******************************************************************
@@ -66,12 +62,26 @@ private:
  * \brief Control object providing Pilatus buffering interface
  *******************************************************************/
 
-class BufferCtrlObj: public HwBufferCtrlObj
+class BufferCtrlObj: public HwBufferCtrlObj, public HwFrameCallbackGen
 {
 DEB_CLASS_NAMESPC(DebModCamera, "BufferCtrlObj", "Pilatus");
 
 public:
-	BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det);
+	struct Info
+	{
+	  Info() : 
+	    m_running_on_detector_pc(false),
+	    m_keep_nb_images(-1) // Keep all images
+	  {}
+	  bool	      m_running_on_detector_pc;
+	  int	      m_keep_nb_images;
+	  std::string m_watch_path;
+	  std::string m_file_base;
+	  std::string m_file_extention;
+	  std::string m_file_patern;
+	};
+	BufferCtrlObj(Camera& cam, 
+		      DetInfoCtrlObj& det,const Info* info= NULL);
 	virtual ~BufferCtrlObj();
 
 	void start();
@@ -94,30 +104,32 @@ public:
 	virtual void getStartTimestamp(Timestamp& start_ts);
 	virtual void getFrameInfo(int acq_frame_nb, HwFrameInfoType& info);
 
-	// -- Buffer control bject
-	BufferCtrlMgr& getBufferMgr()
-	{
-		return m_buffer_ctrl_mgr;
-	}
-	;
-	StdBufferCbMgr& getBufferCbMgr()
-	{
-		return m_buffer_cb_mgr;
-	}
-	;
 	int getLastAcquiredFrame();
 
 	virtual void registerFrameCallback(HwFrameCallback& frame_cb);
 	virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
 private:
-	int m_nb_buffer;
-	SoftBufferAllocMgr m_buffer_alloc_mgr;
-	StdBufferCbMgr m_buffer_cb_mgr;
-	BufferCtrlMgr m_buffer_ctrl_mgr;
-	Camera& m_cam;
-	DetInfoCtrlObj& m_det;
-	Reader* m_reader;
+	class _LocalReader;
+	friend class _LocalReader;
+	class Reader
+	{
+	public:
+	  virtual ~Reader() {}
+	  virtual void start() = 0;
+	  virtual void stop() = 0;
+	  virtual void prepareAcq() = 0;
+	  virtual int getLastAcquiredFrame() const = 0;
+	};
+	int _calcNbMaxImages();
+	char* _readImage(const char*);
+
+  Camera& 		m_cam;
+  DetInfoCtrlObj& 	m_det;
+  Info			m_info;
+  Reader*		m_reader;
 };
+
+std::ostream& operator <<(std::ostream& os, const BufferCtrlObj::Info& info);
 
 /*******************************************************************
  * \class SyncCtrlObj
@@ -130,7 +142,7 @@ DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Pilatus");
 
 public:
 
-	SyncCtrlObj(Camera& cam);
+ SyncCtrlObj(Camera& cam,DetInfoCtrlObj&);
 	virtual ~SyncCtrlObj();
 
 	virtual bool checkTrigMode(TrigMode trig_mode);
@@ -149,7 +161,7 @@ public:
 	virtual void getValidRanges(ValidRangesType& valid_ranges);
 
 	void prepareAcq();
-
+	
 private:
 	Camera& m_cam;
 	int m_nb_frames;
@@ -167,7 +179,12 @@ class Interface: public HwInterface
 DEB_CLASS_NAMESPC(DebModCamera, "PilatusInterface", "Pilatus");
 
 public:
-	Interface(Camera& cam);
+	struct Info
+	{
+	  DetInfoCtrlObj::Info 	m_det_info;
+	  BufferCtrlObj::Info 	m_buffer_info;
+	};
+	Interface(Camera& cam,const Info* = NULL);
 	virtual ~Interface();
 
 	//- From HwInterface
@@ -178,16 +195,6 @@ public:
 	virtual void stopAcq();
 	virtual void getStatus(StatusType& status);
 	virtual int getNbHwAcquiredFrames();
-
-	//Specific pilatus funtions
-	void setLatency(double latency);
-	double getLatency(void);
-
-	void setImagePath(const std::string& path);
-	const std::string& getImagePath(void);
-
-	void setFileName(const std::string& name);
-	const std::string& getFileName(void);
 
 	void setEnergy(double energy);
 	double getEnergy(void);

@@ -19,9 +19,6 @@
  You should have received a copy of the GNU General Public License
  along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
-
-
-#include <yat/network/Address.h>
 #include <pthread.h>
 
 #include <stdlib.h>
@@ -46,9 +43,35 @@
 using namespace lima;
 using namespace lima::Pilatus;
 
+static const char  SOCKET_SEPARATOR = '\030';
+static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
+
+//---------------------------
+//- utility function
+//---------------------------
+static inline const char* _get_ip_addresse(const char *name_ip)
+{
+  
+  if(inet_addr(name_ip) != INADDR_NONE)
+    return name_ip;
+  else
+    {
+      struct hostent *host = gethostbyname(name_ip);
+      if(!host)
+	{
+	  char buffer[256];
+	  snprintf(buffer,sizeof(buffer),"Can not found ip for host %s ",name_ip);
+	  throw LIMA_HW_EXC(Error,buffer);
+	}
+      return inet_ntoa(*((struct in_addr*)host->h_addr));
+    }
+}
 
 
-#define WAIT_UNTIL(testState,errmsg) while(m_state != testState && m_state != Camera::ERROR && m_state != Camera::OK)    \
+#define WAIT_UNTIL(testState,errmsg)				    \
+  while(m_state != testState &&					    \
+	m_state != Camera::ERROR && \
+	m_state != Camera::DISCONNECTED)					    \
 {                                                                   \
   if(!m_cond.wait(TIME_OUT))                                        \
     THROW_HW_ERROR(lima::Error) << errmsg;                          \
@@ -57,7 +80,9 @@ using namespace lima::Pilatus;
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-inline void _split(const std::string inString, const std::string &separator,std::vector<std::string> &returnVector)
+inline void _split(const std::string inString,
+		   const std::string &separator,
+		   std::vector<std::string> &returnVector)
 {
     std::string::size_type start = 0;
     std::string::size_type end = 0;
@@ -78,9 +103,8 @@ Camera::Camera(const char *host,int port)
                 :   m_socket(-1),
                     m_stop(false),
                     m_thread_id(0),
-                    m_use_dw(true),
-                    m_nb_acquired_images(0),
-                    m_state(DISCONNECTED)
+                    m_state(DISCONNECTED),
+                    m_nb_acquired_images(0)
 {
     DEB_CONSTRUCTOR();
     m_server_ip         = host;
@@ -132,9 +156,9 @@ Camera::~Camera()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-std::string Camera::serverIP() const
+const char* Camera::serverIP() const
 {
-    return m_server_ip;
+  return m_server_ip.c_str();
 }
 
 //-----------------------------------------------------
@@ -201,7 +225,7 @@ void Camera::connect(const char *host,int port)
                 struct sockaddr_in add;
                 add.sin_family = AF_INET;
                 add.sin_port = htons((unsigned short)port);
-                add.sin_addr.s_addr = inet_addr(yat::Address(host,0).get_ip_address().c_str());
+                add.sin_addr.s_addr = inet_addr(_get_ip_addresse(host));
                 if(::connect(m_socket,reinterpret_cast<sockaddr*>(&add),sizeof(add)))
                 {
                     close(m_socket);
@@ -389,7 +413,6 @@ void Camera::_run()
 
                                 std::vector<std::string> gain_split;
                                 _split(gain_string," ",gain_split);
-                                int gain_size = gain_split.size();
                                 std::string &gain_value = gain_split[0];
                                 std::map<std::string,Gain>::iterator gFind = GAIN_SERVER_RESPONSE.find(gain_value);
                                 m_gain = gFind->second;
@@ -512,7 +535,7 @@ void Camera::_run()
                         {
                             DEB_TRACE() << "-- imgpath setting succeeded";
                             ////m_imgpath = msg.substr(6);////@@@@
-                            m_state = Camera::OK;
+                            m_state = Camera::STANDBY;
                         }
                         else
                         {
@@ -528,37 +551,6 @@ void Camera::_run()
         }
     }
 }
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-bool Camera::isDirectoryWatcherEnabled()
-{
-    DEB_MEMBER_FUNCT();
-    AutoMutex aLock(m_cond.mutex());
-    return m_use_dw;
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Camera::enableDirectoryWatcher()
-{
-    DEB_MEMBER_FUNCT();
-    AutoMutex aLock(m_cond.mutex());
-    m_use_dw = true;
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Camera::disableDirectoryWatcher()
-{
-    DEB_MEMBER_FUNCT();
-    AutoMutex aLock(m_cond.mutex());
-    m_use_dw = false;
-}
-
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -567,7 +559,6 @@ void Camera::setImgpath(const std::string& path)
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
     WAIT_UNTIL(Camera::STANDBY,"Could not set imgpath, server not idle");
-    m_state = Camera::OK;//need to reset the state FAULT in order to avoid a problem on proxima1 datacollector
     m_imgpath = path;    
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;
@@ -940,7 +931,7 @@ void Camera::setGapfill(bool val)
     WAIT_UNTIL(Camera::STANDBY,"Could not set gap, server not idle");
     m_gap_fill = val;
     std::stringstream msg;
-    msg << "gapfill " << m_gap_fill ? -1 : 0;
+    msg << "gapfill " << (m_gap_fill ? -1 : 0);
     send(msg.str());
 }
 
