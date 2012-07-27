@@ -116,7 +116,13 @@ Camera::Camera(const char *host,int port)
 
     pthread_create(&m_thread_id,NULL,_runFunc,this);
 
-    connect(host,port);
+    try
+      {
+	connect(host,port);
+      }
+    catch(Exception &e)		// Not an error in that case
+      {
+      }
 }
 
 //-----------------------------------------------------

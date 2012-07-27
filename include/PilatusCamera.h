@@ -48,7 +48,7 @@ public:
         EXTERNAL_GATE
     };
 
-    Camera(const char *host = NULL,int port = 0);
+    Camera(const char *host = "localhost",int port = 41234);
     ~Camera();
     
     void connect(const char* host,int port);
