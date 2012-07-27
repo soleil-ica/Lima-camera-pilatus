@@ -568,7 +568,7 @@ void Camera::setImgpath(const std::string& path)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Camera::imgpath(void)
+const std::string& Camera::imgpath() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_imgpath;
@@ -588,7 +588,7 @@ void Camera::setFileName(const std::string& name)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Camera::fileName(void)
+const std::string& Camera::fileName() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_file_name;
@@ -960,7 +960,7 @@ void Camera::sendAnyCommand(const std::string& message)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-int Camera::nbAcquiredImages()
+int Camera::nbAcquiredImages() const
 {
     DEB_MEMBER_FUNCT();
 

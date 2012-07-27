@@ -50,10 +50,10 @@ namespace Pilatus
     int serverPort() const;
 
     void setImgpath(const std::string& path);
-    const std::string& imgpath();
+    const std::string& imgpath() const;
     
     void setFileName(const std::string& name);
-    const std::string& fileName();
+    const std::string& fileName() const;
     
     Status status() const;
 
@@ -93,6 +93,6 @@ namespace Pilatus
     
     void sendAnyCommand(const std::string& message);    
 
-    int nbAcquiredImages();
+    int nbAcquiredImages() const;
    };
 };

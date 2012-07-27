@@ -57,10 +57,10 @@ public:
     int serverPort() const;
 
     void setImgpath(const std::string& path);
-    const std::string& imgpath(void);
+    const std::string& imgpath() const;
     
     void setFileName(const std::string& name);
-    const std::string& fileName(void);
+    const std::string& fileName() const;
     
     Status status() const;
 
@@ -99,14 +99,11 @@ public:
     
     void sendAnyCommand(const std::string& message);    
 
-    int nbAcquiredImages();
-    //s
-    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
-    static const double             TIME_OUT = 10.;
- 
+    int nbAcquiredImages() const;
     
 private:
-    
+    static const double             TIME_OUT = 10.;
+
     const        std::string& errorMessage() const;
     void         softReset();
     void         hardReset();
