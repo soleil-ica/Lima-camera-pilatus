@@ -530,7 +530,7 @@ char* BufferCtrlObj::_readImage(const char* filename)
   return (char*)aReturnData;
 }
 
-std::ostream& operator <<(std::ostream& os, const BufferCtrlObj::Info& info)
+std::ostream& Pilatus::operator <<(std::ostream& os, const BufferCtrlObj::Info& info)
 {
   os << '<'
      << "running_on_detector_pc=" << (info.m_running_on_detector_pc ? "YES" : "NO") << ", "

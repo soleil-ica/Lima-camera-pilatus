@@ -31,7 +31,11 @@ from Lima import Core
 
 cleanup_data = module_helper.load_dep_cleanup(cleanup_data)
 
+from Lima.Pilatus.limapilatus import Pilatus as _P
+globals().update(_P.__dict__)
+
 module_helper.load_cleanup(cleanup_data)
+
 
 del mod_path, depends_on, has_dependent, cleanup_data
 del module_helper

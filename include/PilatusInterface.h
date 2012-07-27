@@ -41,12 +41,12 @@ public:
 	virtual void getDetectorType(std::string& det_type);
 	virtual void getDetectorModel(std::string& det_model);
 
-	virtual void registerMaxImageSizeCallback(HwMaxImageSizeCallback& cb)
+	virtual void registerMaxImageSizeCallback(HwMaxImageSizeCallback&)
 	{
 		;
 	}
 	;
-	virtual void unregisterMaxImageSizeCallback(HwMaxImageSizeCallback& cb)
+	virtual void unregisterMaxImageSizeCallback(HwMaxImageSizeCallback&)
 	{
 		;
 	}
