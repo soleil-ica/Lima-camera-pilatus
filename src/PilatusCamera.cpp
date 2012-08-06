@@ -280,9 +280,9 @@ void Camera::_reinit()
 void Camera::send(const std::string& message)
 {
     DEB_MEMBER_FUNCT();
+    DEB_TRACE() << DEB_VAR1(message);
     std::string msg = message;
     msg+= SOCKET_SEPARATOR;
-    DEB_TRACE() << ">> "<<msg;    
     write(m_socket,msg.c_str(),msg.size());
 }
 
@@ -393,10 +393,11 @@ void Camera::_run()
                 if(m_state == Camera::ERROR)//nothing to do, keep last error until a new explicit user command (start, stop, setenergy, ...)
                   continue;
                 std::string strMessages(messages,aMessageSize );                    
-                DEB_TRACE() << "<< messages = "<<strMessages;
+                DEB_TRACE() << DEB_VAR1(strMessages);
                 std::vector<std::string> msg_vector;
                 _split(strMessages,SPLIT_SEPARATOR,msg_vector);
-                for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin(); msg_iterator != msg_vector.end();++msg_iterator)
+                for(std::vector<std::string>::iterator msg_iterator = msg_vector.begin();
+		    msg_iterator != msg_vector.end();++msg_iterator)
                 {
                     std::string &msg = *msg_iterator;
 
