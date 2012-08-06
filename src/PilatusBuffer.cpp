@@ -26,6 +26,7 @@
 #include <sys/statvfs.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include "Debug.h"
 #include "PilatusInterface.h"
