@@ -43,38 +43,39 @@ DetInfoCtrlObj::DetInfoCtrlObj(const DetInfoCtrlObj::Info* info)
 	  THROW_HW_ERROR(Error) << "Can't open config file :"
 				<< aConfigFullPath;
 	char aReadBuffer[1024];
+	int aWidth = -1,aHeight = -1;
 	while(fgets(aReadBuffer,sizeof(aReadBuffer),aConfFile))
 	  {
-	    int aWidth = -1,aHeight = -1;
 	    if(!strncmp(aReadBuffer,
-			CAMERA_NAME_TOKEN,sizeof(CAMERA_NAME_TOKEN)))
+			CAMERA_NAME_TOKEN,sizeof(CAMERA_NAME_TOKEN) - 1))
 	      {
 		char *aBeginPt = strchr(aReadBuffer,(unsigned int)'"');
+		++aBeginPt;
 		char *aEndPt = strrchr(aBeginPt,(unsigned int)'"');
 		*aEndPt = '\0';	// remove last "
 		m_info.m_det_model = aBeginPt;
 	      }
 	    else if(!strncmp(aReadBuffer,
-			     CAMERA_HIGH_TOKEN,sizeof(CAMERA_HIGH_TOKEN)))
+			     CAMERA_HIGH_TOKEN,sizeof(CAMERA_HIGH_TOKEN) - 1))
 	      {
 		char *aPt = aReadBuffer;
-		while(*aPt && *aPt < '1' && *aPt > '9') ++aPt;
+		while(*aPt && (*aPt < '1' || *aPt > '9')) ++aPt;
 		aHeight = atoi(aPt);
 	      }
 	    else if(!strncmp(aReadBuffer,
-			     CAMERA_WIDE_TOKEN,sizeof(CAMERA_WIDE_TOKEN)))
+			     CAMERA_WIDE_TOKEN,sizeof(CAMERA_WIDE_TOKEN) - 1))
 	      {
 		char *aPt = aReadBuffer;
-		while(*aPt && *aPt < '1' && *aPt > '9') ++aPt;
+		while(*aPt && (*aPt < '1' || *aPt > '9')) ++aPt;
 		aWidth = atoi(aPt);
 	      }
-	    if(aWidth < 0 || aHeight < 0)
-	      {
-		fclose(aConfFile);
-		THROW_HW_ERROR(Error) << "Can't get detector info";
-	      }
-	    m_info.m_det_size = Size(aWidth,aHeight);
 	  }
+	if(aWidth <= 0 || aHeight <= 0)
+	  {
+	    fclose(aConfFile);
+	    THROW_HW_ERROR(Error) << "Can't get detector info";
+	  }
+	m_info.m_det_size = Size(aWidth,aHeight);
 	fclose(aConfFile);
       }
 }
