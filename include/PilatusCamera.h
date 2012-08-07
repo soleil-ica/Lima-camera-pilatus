@@ -102,12 +102,13 @@ public:
     int nbAcquiredImages() const;
     
 private:
-    static const double             TIME_OUT = 10.;
+    static const double             TIME_OUT = 3.;
 
     const        std::string& errorMessage() const;
     void         softReset();
     void         hardReset();
     void         quit();    
+    void	 _connect(const char* host,int port);
     
     static void* _runFunc(void*);
     void         _run();    
@@ -131,7 +132,7 @@ private:
 
     //Cache variables
     std::string             m_error_message;
-    double                  m_energy;
+    int			    m_energy;
     double                  m_exposure;
     int                     m_exposure_per_frame;
     double                  m_exposure_period;
