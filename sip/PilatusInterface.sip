@@ -57,6 +57,8 @@ namespace Pilatus
     void start();
     void stop();
     void reset();
+    bool isStopped() const;
+
     virtual void setFrameDim(const FrameDim& frame_dim);
     virtual void getFrameDim(FrameDim& frame_dim /Out/);
 

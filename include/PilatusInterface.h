@@ -87,6 +87,8 @@ public:
 	void start();
 	void stop();
 	void reset();
+	bool isStopped() const;
+
 	virtual void setFrameDim(const FrameDim& frame_dim);
 	virtual void getFrameDim(FrameDim& frame_dim);
 
@@ -118,6 +120,7 @@ private:
 	  virtual void start() = 0;
 	  virtual void stop() = 0;
 	  virtual void prepareAcq() = 0;
+	  virtual bool isStopped() const = 0;
 	  virtual int getLastAcquiredFrame() const = 0;
 	};
 	int _calcNbMaxImages();

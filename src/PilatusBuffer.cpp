@@ -19,6 +19,7 @@
  You should have received a copy of the GNU General Public License
  along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
+#include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/inotify.h>
@@ -99,6 +100,11 @@ public:
     m_wait = true;
     write(m_pipes[1],"|",1);
   }
+  bool isStopped() const
+  {
+    AutoMutex lock(m_cond.mutex());
+    return m_wait;
+  }
 
   void prepareAcq()
   {
@@ -108,10 +114,32 @@ public:
     for(DatasPendingType::iterator i = m_datas_pending.begin();
 	i != m_datas_pending.end();m_datas_pending.erase(i++))
       delete [] i->second;
+
+    //Clean watch directory
+    DIR* aWatchDir = opendir(m_info.m_watch_path.c_str());
+    if(aWatchDir)
+      {
+	while(1)
+	  {
+	    char fullPath[1024];
+	    struct dirent aDirentStruct,*result;
+	    int status = readdir_r(aWatchDir,
+				   &aDirentStruct,&result);
+	    if(status || !result)
+	      break;
+	    snprintf(fullPath,sizeof(fullPath),
+		     "%s/%s",m_info.m_watch_path.c_str(),
+		     result->d_name);
+	    unlink(fullPath);
+	  }
+	closedir(aWatchDir);
+      }
   }
   void start()
   {
     AutoMutex lock(m_cond.mutex());
+    m_cam.setImgpath(m_info.m_watch_path);
+    m_cam.setFileName(m_info.m_file_patern);
     m_wait = false;
     m_cond.signal();
   }
@@ -125,6 +153,7 @@ private:
   {
     m_cond.acquire();
     m_quit = true;
+    m_cond.signal();
     m_cond.release();
 
     close(m_pipes[1]);
@@ -169,47 +198,81 @@ private:
 		if(event->len)
 		  {
 		    const char* filename = event->name;
+		    const char *extention = strrchr(filename,'.');
+
 		    AutoMutex lock(m_cond.mutex());
 		    if(m_wait)
 		      _stopWatch();
-		    else if(!m_info.m_file_base.compare(0,m_info.m_file_base.size(),
-							filename))
+		    else if(extention && !strcmp(extention,".edf") &&
+			    !m_info.m_file_base.compare(0,m_info.m_file_base.size(),
+							filename,m_info.m_file_base.size()))
 		      {
 			int imageNb = atoi(filename + 
 					   m_info.m_file_base.size());
 			int nextImageExpected = m_image_nb_expected + 1;
-			char *aDataBuffer = m_buffer._readImage(filename);
-			if(imageNb == nextImageExpected)
+			std::string fullPath = m_info.m_watch_path + "/";
+			fullPath += filename;
+			char *aDataBuffer = NULL;
+			try
 			  {
-			    HwFrameInfoType aNewFrameInfo(imageNb,aDataBuffer,&aFrameDim,
-							  Timestamp(),0,
-							  HwFrameInfoType::Transfer);
-			    m_wait = !m_buffer.newFrameReady(aNewFrameInfo);
-			    m_image_nb_expected = imageNb;
-			    DatasPendingType::iterator i = m_datas_pending.begin();
-			    while(i != m_datas_pending.end())
-			      {
-				nextImageExpected = m_image_nb_expected + 1;
-				if(i->first == nextImageExpected)
-				  {
-				    HwFrameInfoType aFrameInfo(i->first,i->second,&aFrameDim,
-							       Timestamp(),0,
-							       HwFrameInfoType::Transfer);
-				    m_wait = !m_buffer.newFrameReady(aFrameInfo);
-				    m_image_nb_expected = i->first;
-				    m_datas_pending.erase(i++);
-				  }
-				else
-				  break;
-			      }
+			    aDataBuffer = m_buffer._readImage(fullPath.c_str());
 			  }
-			else
+			catch(Exception &e) // Error ????
 			  {
+			    m_wait = true;
+			    m_cam.stopAcquisition();
+			    break;
+			  }
+			if(aDataBuffer)
+			  {
+			    if(imageNb == nextImageExpected)
+			      {
+				HwFrameInfoType aNewFrameInfo(imageNb,aDataBuffer,&aFrameDim,
+							      Timestamp(),0,
+							      HwFrameInfoType::Shared);
+				m_wait = !m_buffer.newFrameReady(aNewFrameInfo);
+				m_image_nb_expected = imageNb;
+				DatasPendingType::iterator i = m_datas_pending.begin();
+				while(i != m_datas_pending.end())
+				  {
+				    nextImageExpected = m_image_nb_expected + 1;
+				    if(i->first == nextImageExpected)
+				      {
+					HwFrameInfoType aFrameInfo(i->first,i->second,&aFrameDim,
+								   Timestamp(),0,
+								   HwFrameInfoType::Shared);
+					m_wait = !m_buffer.newFrameReady(aFrameInfo);
+					m_image_nb_expected = i->first;
+					m_datas_pending.erase(i++);
+				      }
+				    else
+				      break;
+				  }
+				
+			      }
+			    else
+			      {
+				m_datas_pending.insert(std::pair<int,char*>(imageNb,aDataBuffer));
+			      }
+			    if(m_info.m_keep_nb_images >= 0)
+			      {
+				int imageId2Remove = imageNb - m_info.m_keep_nb_images;
+				if(imageId2Remove >= 0)
+				  {
+				    char aFileName[128];
+				    snprintf(aFileName,sizeof(aFileName),
+					     m_info.m_file_patern.c_str(),imageId2Remove);
+				    char aFullPathBuffer[1024];
+				    snprintf(aFullPathBuffer,sizeof(aFullPathBuffer),
+					     "%s/%s",m_info.m_watch_path.c_str(),aFileName);
+				    unlink(aFullPathBuffer);
+				  }
+			      }
 			  }
 		      }
 		  }
 		aPt += EVENT_SIZE + event->len;
-		length -= EVENT_SIZE - event->len;
+		length -= EVENT_SIZE + event->len;
 	      }
 	  }
 	else if(fds[0].revents)
@@ -339,6 +402,7 @@ void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
 void BufferCtrlObj::start()
 {
     DEB_MEMBER_FUNCT();
+    m_reader->start();
 }
 
 //-----------------------------------------------------
@@ -347,14 +411,20 @@ void BufferCtrlObj::start()
 void BufferCtrlObj::stop()
 {
     DEB_MEMBER_FUNCT();
+    m_reader->stop();
 }
 
+bool BufferCtrlObj::isStopped() const
+{
+  return m_reader->isStopped();
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
 void BufferCtrlObj::reset()
 {
     DEB_MEMBER_FUNCT();
+    m_reader->prepareAcq();
 }
 
 //-----------------------------------------------------
@@ -458,7 +528,7 @@ void BufferCtrlObj::getFrameInfo(int acq_frame_nb, HwFrameInfoType& info)
     char *aDataBuffer = _readImage(fullPath.c_str());
     info = HwFrameInfoType(acq_frame_nb,aDataBuffer,&aFrameDim,
 			   Timestamp(),0,
-			   HwFrameInfoType::Transfer);
+			   HwFrameInfoType::Shared);
 }
 
 

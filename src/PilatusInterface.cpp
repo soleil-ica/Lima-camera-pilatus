@@ -124,7 +124,7 @@ void DetInfoCtrlObj::getDefImageType(ImageType& image_type)
 void DetInfoCtrlObj::getCurrImageType(ImageType& image_type)
 {
     DEB_MEMBER_FUNCT();
-    image_type= Bpp32;
+    image_type= Bpp32S;
 }
 
 //-----------------------------------------------------
@@ -322,7 +322,7 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void SyncCtrlObj:: prepareAcq()
+void SyncCtrlObj::prepareAcq()
 {
 
     double exposure =  m_exposure_requested;
@@ -407,9 +407,6 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    Camera::Status cam_status = m_cam.status();
-    if (cam_status == Camera::DISCONNECTED)
-        m_cam.connect(m_cam.serverIP(),m_cam.serverPort());
     m_buffer.reset();
     m_sync.prepareAcq();
 
@@ -421,8 +418,8 @@ void Interface::prepareAcq()
 void Interface::startAcq()
 {
     DEB_MEMBER_FUNCT();  
-    m_cam.startAcquisition();
     m_buffer.start();
+    m_cam.startAcquisition();
 }
 
 //-----------------------------------------------------
@@ -452,7 +449,10 @@ void Interface::getStatus(StatusType& status)
 
         int nbFrames;
         m_sync.getNbHwFrames(nbFrames);
-	status.acq = getNbHwAcquiredFrames() >= nbFrames ? AcqReady : AcqRunning;
+	if(m_buffer.isStopped())
+	  status.acq = AcqReady;
+	else
+	  status.acq = getNbHwAcquiredFrames() >= nbFrames ? AcqReady : AcqRunning;
     }
     else if(cam_status == Camera::DISCONNECTED ||
 	    cam_status == Camera::ERROR)

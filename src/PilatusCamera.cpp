@@ -255,6 +255,8 @@ void Camera::_connect(const char *host,int port)
                 THROW_HW_ERROR(Error) << "Can't create socket";
         }
     }
+    //Workaround to avoid bug in camserver
+    send("exposure warmup.edf");
 }
 
 //-----------------------------------------------------
