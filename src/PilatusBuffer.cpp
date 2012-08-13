@@ -230,7 +230,10 @@ private:
 				HwFrameInfoType aNewFrameInfo(imageNb,aDataBuffer,&aFrameDim,
 							      Timestamp(),0,
 							      HwFrameInfoType::Shared);
-				m_wait = !m_buffer.newFrameReady(aNewFrameInfo);
+				lock.unlock();
+				bool tmpWait = !m_buffer.newFrameReady(aNewFrameInfo);
+				lock.lock();
+				if(!m_wait) m_wait = tmpWait;
 				m_image_nb_expected = imageNb;
 				DatasPendingType::iterator i = m_datas_pending.begin();
 				while(i != m_datas_pending.end())
@@ -241,9 +244,15 @@ private:
 					HwFrameInfoType aFrameInfo(i->first,i->second,&aFrameDim,
 								   Timestamp(),0,
 								   HwFrameInfoType::Shared);
-					m_wait = !m_buffer.newFrameReady(aFrameInfo);
 					m_image_nb_expected = i->first;
-					m_datas_pending.erase(i++);
+					m_datas_pending.erase(i);
+					
+					lock.unlock();
+					tmpWait = !m_buffer.newFrameReady(aFrameInfo);
+					lock.lock();
+
+					if(!m_wait) m_wait = tmpWait;
+					i = m_datas_pending.begin();
 				      }
 				    else
 				      break;
