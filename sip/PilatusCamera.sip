@@ -85,6 +85,7 @@ namespace Pilatus
 
     void startAcquisition(int image_number = 0);
     void stopAcquisition();
+    void errorStopAcquisition();
 
     bool gapfill() const;
     void setGapfill(bool onOff);

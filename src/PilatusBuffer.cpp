@@ -73,6 +73,7 @@ public:
 
     if(pipe(m_pipes))
       THROW_HW_ERROR(Error) << "Can't open pipe";
+    write(m_pipes[1],"|",1);
 
     m_inotify_fd = inotify_init();
     _startWatch();
@@ -113,7 +114,7 @@ public:
     m_image_nb_expected = -1;
     for(DatasPendingType::iterator i = m_datas_pending.begin();
 	i != m_datas_pending.end();m_datas_pending.erase(i++))
-      delete [] i->second;
+      free(i->second);
 
     //Clean watch directory
     DIR* aWatchDir = opendir(m_info.m_watch_path.c_str());
@@ -175,6 +176,8 @@ private:
 
   void run()
   {
+    DEB_MEMBER_FUNCT();
+
     struct pollfd fds[2];
     fds[0].fd = m_pipes[0];
     fds[0].events = POLLIN;
@@ -182,7 +185,7 @@ private:
     fds[1].events = POLLIN;
     FrameDim aFrameDim;
     m_buffer.getFrameDim(aFrameDim);
-
+    int acq_nb_images;
     while(1)
       {
 	poll(fds,2,-1);
@@ -220,7 +223,7 @@ private:
 			catch(Exception &e) // Error ????
 			  {
 			    m_wait = true;
-			    m_cam.stopAcquisition();
+			    m_cam.errorStopAcquisition();
 			    break;
 			  }
 			if(aDataBuffer)
@@ -261,7 +264,15 @@ private:
 			      }
 			    else
 			      {
-				m_datas_pending.insert(std::pair<int,char*>(imageNb,aDataBuffer));
+				if(m_datas_pending.size() > 32)
+				  {
+				    m_wait = true;
+				    m_cam.errorStopAcquisition();
+				    free(aDataBuffer);
+				    break;
+				  }
+				else
+				  m_datas_pending.insert(std::pair<int,char*>(imageNb,aDataBuffer));
 			      }
 			    if(m_info.m_keep_nb_images >= 0)
 			      {
@@ -277,6 +288,8 @@ private:
 				    unlink(aFullPathBuffer);
 				  }
 			      }
+			    if(acq_nb_images == m_image_nb_expected + 1)
+			      m_wait = true;
 			  }
 		      }
 		  }
@@ -284,10 +297,14 @@ private:
 		length -= EVENT_SIZE + event->len;
 	      }
 	  }
-	else if(fds[0].revents)
+
+	if(m_wait || fds[0].revents)
 	  {
-	    char buffer[1024];
-	    read(m_pipes[0],buffer,sizeof(buffer));
+	    if(fds[0].revents)
+	      {
+		char buffer[1024];
+		read(m_pipes[0],buffer,sizeof(buffer));
+	      }
 	    AutoMutex lock(m_cond.mutex());
 	    if(m_quit) break;
 	    while(m_wait && !m_quit)
@@ -295,8 +312,11 @@ private:
 		_stopWatch();
 		m_thread_running = false;
 		m_cond.signal();
+		DEB_TRACE() << "wait";
 		m_cond.wait();
+		DEB_TRACE() << "run";
 		m_thread_running = true;
+		acq_nb_images = m_cam.nbImagesInSequence();
 		_startWatch();
 	      }
 	  }

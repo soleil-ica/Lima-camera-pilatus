@@ -139,14 +139,16 @@ Camera::~Camera()
     m_stop = true;
     if(m_socket >=0)
     {
-      write(m_pipes[1],"|",1);
-      ///close(m_socket);
-      shutdown(m_socket,2);
+      if(write(m_pipes[1],"|",1) == -1)
+	DEB_ERROR() << "Something wrong happen!!!";
+
+      close(m_socket);
       m_socket = -1;
     }
     else
     {
-        write(m_pipes[1],"|",1);
+      if(write(m_pipes[1],"|",1) == -1)
+	DEB_ERROR() << "Something wrong happen!!!";
     }
     aLock.unlock();
 
@@ -247,7 +249,9 @@ void Camera::_connect(const char *host,int port)
                     m_socket = -1;
                     THROW_HW_ERROR(Error) << "Can't open connection";
                 }
-                write(m_pipes[1],"|",1);
+                if(write(m_pipes[1],"|",1) == -1)
+		  DEB_ERROR() << "Something wrong happen to pipe ???";
+
                 m_state = Camera::STANDBY;
                 _resync();
             }
@@ -294,7 +298,9 @@ void Camera::send(const std::string& message)
     DEB_TRACE() << DEB_VAR1(message);
     std::string msg = message;
     msg+= SOCKET_SEPARATOR;
-    write(m_socket,msg.c_str(),msg.size());
+    if(write(m_socket,msg.c_str(),msg.size()) == -1)
+      THROW_HW_ERROR(Error) << "Could not send message to camserver";
+
 }
 
 //-----------------------------------------------------
@@ -386,7 +392,8 @@ void Camera::_run()
         if(fds[0].revents)
         {
             char buffer[1024];
-            read(m_pipes[0],buffer,sizeof(buffer));
+            if(read(m_pipes[0],buffer,sizeof(buffer)) == -1)
+	      DEB_WARNING() << "Something strange happen!";
         }
         if(nb_poll_fd > 1 && fds[1].revents)
         {
@@ -932,6 +939,11 @@ void Camera::stopAcquisition()
     }
 }
 
+void Camera::errorStopAcquisition()
+{
+  stopAcquisition();
+  m_state = Camera::ERROR;
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
