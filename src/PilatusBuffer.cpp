@@ -584,19 +584,14 @@ char* BufferCtrlObj::_readImage(const char* filename)
   getFrameDim(anImageDim);
   
   void *aReturnData;
-  posix_memalign(&aReturnData,16,anImageDim.getMemSize());
-  
+  if(posix_memalign(&aReturnData,16,anImageDim.getMemSize()))
+    THROW_HW_ERROR(Error) << "Can't allocate memory";
+
   int fd = open(filename,O_RDONLY);
   if(fd < 0)
     {
       free(aReturnData);
       THROW_HW_ERROR(Error) << "Can't open file:" << DEB_VAR1(filename);
-    }
-  off_t fileSize = lseek(fd,0,SEEK_END);
-  if(fileSize - DECTRIS_EDF_OFFSET != anImageDim.getMemSize())
-    {
-      close(fd),free(aReturnData);
-      THROW_HW_ERROR(Error) << "Image is not available yet";
     }
   
   lseek(fd,DECTRIS_EDF_OFFSET,SEEK_SET);
