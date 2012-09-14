@@ -268,7 +268,10 @@ void Camera::_connect(const char *host,int port)
 //-----------------------------------------------------
 void Camera::_resync()
 {
-    send("setenergy");
+    if(m_has_cmd_setenergy)
+      send("setenergy");
+    else
+      send("setthreshold");
     send("exptime");
     send("expperiod");
     std::stringstream cmd;
@@ -528,7 +531,6 @@ void Camera::_run()
                             DEB_TRACE() << "-- Exposure succeeded";
                             m_state = Camera::STANDBY;
                             m_nb_acquired_images = m_nimages;
-                            std::string real_message = msg.substr(5);
                         }
                         else
                         {
@@ -542,10 +544,20 @@ void Camera::_run()
                     {
                         if(msg.substr(2,3) == "ERR")
                         {
+			  // Not an error just old version of camserver
+			  if(msg.find("Unrecognized command: setenergy") != 
+			     std::string::npos)
+			    {
+			      m_has_cmd_setenergy = false;
+			      _resync();
+			    }
+			  else
+			    {
                             DEB_TRACE() << "-- ERROR";
                             m_error_message = msg.substr(6);
                             DEB_TRACE() << m_error_message;
                             m_state = Camera::ERROR;
+			    }
                         }
                     }
                     else if(msg.substr(0,2) == "10")
@@ -671,10 +683,15 @@ void Camera::setEnergy(double val)
     AutoMutex aLock(m_cond.mutex());
     RECONNECT_WAIT_UNTIL(Camera::STANDBY,
 			 "Could not set energy, server is not idle");
-    m_state = Camera::SETTING_ENERGY;
-    std::stringstream msg;
-    msg << "setenergy " << val;
-    send(msg.str());
+    if(m_has_cmd_setenergy)
+      {
+	m_state = Camera::SETTING_ENERGY;
+	std::stringstream msg;
+	msg << "setenergy " << val;
+	send(msg.str());
+      }
+    else
+      THROW_HW_ERROR(Error) << "This version of camserver don't have this feature";
 
 }
 

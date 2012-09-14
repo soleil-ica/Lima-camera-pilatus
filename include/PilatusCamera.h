@@ -146,7 +146,8 @@ private:
     std::string             m_imgpath;
     std::string             m_file_name;
     std::string             m_file_pattern;    
-    int						m_nb_acquired_images;
+    int			    m_nb_acquired_images;
+    bool		    m_has_cmd_setenergy;
 };
 }
 }
