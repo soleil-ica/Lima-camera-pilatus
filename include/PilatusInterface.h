@@ -2,7 +2,7 @@
 #define PILATUSINTERFACE_H
 
 #include "HwInterface.h"
-#include "HwBufferMgr.h"
+#include "HwFileEventMgr.h"
 #include "Debug.h"
 #include "PilatusCamera.h"
 
@@ -56,84 +56,6 @@ public:
 private:
 	Info	m_info;
 };
-
-/*******************************************************************
- * \class BufferCtrlObj
- * \brief Control object providing Pilatus buffering interface
- *******************************************************************/
-
-class BufferCtrlObj: public HwBufferCtrlObj, public HwFrameCallbackGen
-{
-DEB_CLASS_NAMESPC(DebModCamera, "BufferCtrlObj", "Pilatus");
-
-public:
-	struct Info
-	{
-	  Info() : 
-	    m_running_on_detector_pc(false),
-	    m_keep_nb_images(-1) // Keep all images
-	  {}
-	  bool	      m_running_on_detector_pc;
-	  int	      m_keep_nb_images;
-	  std::string m_watch_path;
-	  std::string m_file_base;
-	  std::string m_file_extention;
-	  std::string m_file_patern;
-	};
-	BufferCtrlObj(Camera& cam, 
-		      DetInfoCtrlObj& det,const Info* info= NULL);
-	virtual ~BufferCtrlObj();
-
-	void start();
-	void stop();
-	void reset();
-	bool isStopped() const;
-
-	virtual void setFrameDim(const FrameDim& frame_dim);
-	virtual void getFrameDim(FrameDim& frame_dim);
-
-	virtual void setNbBuffers(int nb_buffers);
-	virtual void getNbBuffers(int& nb_buffers);
-
-	virtual void setNbConcatFrames(int nb_concat_frames);
-	virtual void getNbConcatFrames(int& nb_concat_frames);
-
-	virtual void getMaxNbBuffers(int& max_nb_buffers);
-
-	virtual void *getBufferPtr(int buffer_nb, int concat_frame_nb = 0);
-	virtual void *getFramePtr(int acq_frame_nb);
-
-	virtual void getStartTimestamp(Timestamp& start_ts);
-	virtual void getFrameInfo(int acq_frame_nb, HwFrameInfoType& info);
-
-	int getLastAcquiredFrame();
-
-	virtual void registerFrameCallback(HwFrameCallback& frame_cb);
-	virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
-private:
-	class _LocalReader;
-	friend class _LocalReader;
-	class Reader
-	{
-	public:
-	  virtual ~Reader() {}
-	  virtual void start() = 0;
-	  virtual void stop() = 0;
-	  virtual void prepareAcq() = 0;
-	  virtual bool isStopped() const = 0;
-	  virtual int getLastAcquiredFrame() const = 0;
-	};
-	int _calcNbMaxImages();
-	char* _readImage(const char*);
-
-  Camera& 		m_cam;
-  DetInfoCtrlObj& 	m_det;
-  Info			m_info;
-  Reader*		m_reader;
-};
-
-std::ostream& operator <<(std::ostream& os, const BufferCtrlObj::Info& info);
-
 /*******************************************************************
  * \class SyncCtrlObj
  * \brief Control object providing Pilatus synchronization interface
@@ -182,12 +104,7 @@ class Interface: public HwInterface
 DEB_CLASS_NAMESPC(DebModCamera, "PilatusInterface", "Pilatus");
 
 public:
-	struct Info
-	{
-	  DetInfoCtrlObj::Info 	m_det_info;
-	  BufferCtrlObj::Info 	m_buffer_info;
-	};
-	Interface(Camera& cam,const Info* = NULL);
+	Interface(Camera& cam,const DetInfoCtrlObj::Info* = NULL);
 	virtual ~Interface();
 
 	//- From HwInterface
@@ -208,10 +125,14 @@ public:
 	void sendAnyCommand(const std::string& str);
 
 private:
+	class _BufferCallback;
+	friend class _BufferCallback;
+
 	Camera& m_cam;
 	CapList m_cap_list;
 	DetInfoCtrlObj m_det_info;
-	BufferCtrlObj m_buffer;
+	_BufferCallback* m_buffer_cbk;
+	HwTmpfsBufferMgr m_buffer;
 	SyncCtrlObj m_sync;
 	double m_latency;
 };

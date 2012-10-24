@@ -32,56 +32,6 @@ namespace Pilatus
     double getMinLatTime() const;
   };
 
-  class BufferCtrlObj: HwBufferCtrlObj,HwFrameCallbackGen
-  {
-%TypeHeaderCode
-#include <PilatusInterface.h>
-%End
-  public:
-    struct Info
-    {
-      Info();
-
-      bool	      m_running_on_detector_pc;
-      int	      m_keep_nb_images;
-      std::string m_watch_path;
-      std::string m_file_base;
-      std::string m_file_extention;
-      std::string m_file_patern;
-    };
-    BufferCtrlObj(Pilatus::Camera& cam, 
-		  Pilatus::DetInfoCtrlObj& det,
-		  const Pilatus::BufferCtrlObj::Info* info= NULL);
-    virtual ~BufferCtrlObj();
-
-    void start();
-    void stop();
-    void reset();
-    bool isStopped() const;
-
-    virtual void setFrameDim(const FrameDim& frame_dim);
-    virtual void getFrameDim(FrameDim& frame_dim /Out/);
-
-    virtual void setNbBuffers(int nb_buffers);
-    virtual void getNbBuffers(int& nb_buffers /Out/);
-
-    virtual void setNbConcatFrames(int nb_concat_frames);
-    virtual void getNbConcatFrames(int& nb_concat_frames /Out/);
-
-    virtual void getMaxNbBuffers(int& max_nb_buffers /Out/);
-
-    virtual void *getBufferPtr(int buffer_nb, int concat_frame_nb = 0);
-    virtual void *getFramePtr(int acq_frame_nb);
-
-    virtual void getStartTimestamp(Timestamp& start_ts /Out/);
-    virtual void getFrameInfo(int acq_frame_nb, HwFrameInfoType& info);
-
-    int getLastAcquiredFrame();
-
-    virtual void registerFrameCallback(HwFrameCallback& frame_cb);
-    virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
-  };
-
   class SyncCtrlObj: HwSyncCtrlObj
   {
 %TypeHeaderCode
@@ -116,13 +66,8 @@ namespace Pilatus
 #include <PilatusInterface.h>
 %End
   public:
-    struct Info
-    {
-      Pilatus::DetInfoCtrlObj::Info 	m_det_info;
-      Pilatus::BufferCtrlObj::Info 	m_buffer_info;
-    };
     Interface(Pilatus::Camera& cam,
-	      const Pilatus::Interface::Info* = NULL);
+	      const Pilatus::DetInfoCtrlObj::Info* = NULL);
     virtual ~Interface();
 
     //- From HwInterface

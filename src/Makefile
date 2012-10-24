@@ -1,4 +1,4 @@
-pilatus-objs = PilatusCamera.o PilatusInterface.o PilatusBuffer.o
+pilatus-objs = PilatusCamera.o PilatusInterface.o
 
 SRCS = $(pilatus-objs:.o=.cpp) 
 

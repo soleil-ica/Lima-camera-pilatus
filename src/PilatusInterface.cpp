@@ -1,7 +1,9 @@
+#include <algorithm>
+#include <fcntl.h>
+#include <pwd.h>
+#include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
-#include <pwd.h>
-#include <algorithm>
 #include "Debug.h"
 #include "PilatusInterface.h"
 
@@ -14,6 +16,10 @@ static const char* CAMERA_DEFAULT_USER= "det";
 static const char CAMERA_NAME_TOKEN[] = "camera_name";
 static const char CAMERA_WIDE_TOKEN[] = "camera_wide";
 static const char CAMERA_HIGH_TOKEN[] = "camera_high";
+
+static const char WATCH_PATH[] = "/lima_data";
+static const char FILE_PATTERN[] = "tmp_img_%.5d.edf";
+static const int  DECTRIS_EDF_OFFSET = 1024;
 
 /*******************************************************************
  * \brief DetInfoCtrlObj constructor
@@ -337,16 +343,99 @@ void SyncCtrlObj::prepareAcq()
 
 }
 
+/*******************************************************************
+ * \brief Interface::_BufferCallback
+ *******************************************************************/
+class Interface::_BufferCallback : public HwTmpfsBufferMgr::Callback
+{
+  DEB_CLASS_NAMESPC(DebModCamera, "_BufferCallback", "Pilatus");
+public:
+  _BufferCallback(Interface& hwInterface) : m_interface(hwInterface) {}
+
+  virtual void prepare(const DirectoryEvent::Parameters &params)
+  {
+    DEB_MEMBER_FUNCT();
+
+    m_interface.m_cam.setImgpath(params.watch_path);
+    m_interface.m_cam.setFileName(params.file_pattern);
+  }
+
+  virtual bool getFrameInfo(int image_number,const char* full_path,
+			    HwFileEventCallbackHelper::CallFrom from,
+			    HwFrameInfoType &frame_info)
+  {
+    DEB_MEMBER_FUNCT();
+
+    FrameDim anImageDim;
+    getFrameDim(anImageDim);
+  
+    void *aDataBuffer;
+    if(posix_memalign(&aDataBuffer,16,anImageDim.getMemSize()))
+      THROW_HW_ERROR(Error) << "Can't allocate memory";
+
+    int fd = open(full_path,O_RDONLY);
+    if(fd < 0)
+      {
+	free(aDataBuffer);
+	if(from == HwFileEventCallbackHelper::OnDemand)
+	  THROW_HW_ERROR(Error) << "Image is no more available";
+	else
+	  {
+	    m_interface.m_cam.errorStopAcquisition();
+	    THROW_HW_ERROR(Error) << "Can't open file:" << DEB_VAR1(full_path);
+	  }
+      }
+  
+    lseek(fd,DECTRIS_EDF_OFFSET,SEEK_SET);
+    ssize_t aReadSize = read(fd,aDataBuffer,anImageDim.getMemSize());
+    if(aReadSize != anImageDim.getMemSize())
+      {
+	close(fd),free(aDataBuffer);
+	m_interface.m_cam.errorStopAcquisition();
+	THROW_HW_ERROR(Error) << "Problem to read image:" << DEB_VAR1(full_path);
+      }
+    close(fd);
+    
+    frame_info = HwFrameInfoType(image_number,aDataBuffer,&anImageDim,
+				 Timestamp(),0,
+				 HwFrameInfoType::Shared);
+    bool aReturnFlag = true;
+    if(m_interface.m_buffer.getNbOfFramePending() > 32)
+      {
+	m_interface.m_cam.errorStopAcquisition();
+	aReturnFlag = false;
+      }
+    else
+      aReturnFlag = (image_number + 1) != m_interface.m_cam.nbImagesInSequence();
+
+    return aReturnFlag;
+  }
+  virtual void getFrameDim(FrameDim& frame_dim)
+  {
+    DEB_MEMBER_FUNCT();
+
+    Size current_size;
+    m_interface.m_det_info.getDetectorImageSize(current_size);
+    ImageType current_image_type;
+    m_interface.m_det_info.getCurrImageType(current_image_type);
+    
+    frame_dim.setSize(current_size);
+    frame_dim.setImageType(current_image_type);
+  }
+private:
+  Interface&	m_interface;
+};
 
 /*******************************************************************
  * \brief Hw Interface constructor
  *******************************************************************/
 
-Interface::Interface(Camera& cam,const Interface::Info* info)
+Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
             :   m_cam(cam),
-                m_det_info(info ? &info->m_det_info : NULL),
-                m_buffer(cam,m_det_info,
-			 info ? &info->m_buffer_info : NULL),
+                m_det_info(info),
+		m_buffer_cbk(new Interface::_BufferCallback(*this)),
+                m_buffer(WATCH_PATH,FILE_PATTERN,
+			 *m_buffer_cbk),
                 m_sync(cam,m_det_info)
 {
     DEB_CONSTRUCTOR();
@@ -368,6 +457,7 @@ Interface::Interface(Camera& cam,const Interface::Info* info)
 Interface::~Interface()
 {
     DEB_DESTRUCTOR();
+    delete m_buffer_cbk;
 }
 
 //-----------------------------------------------------
@@ -407,7 +497,7 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    m_buffer.reset();
+    m_buffer.prepare();
     m_sync.prepareAcq();
 
 }
@@ -417,7 +507,7 @@ void Interface::prepareAcq()
 //-----------------------------------------------------
 void Interface::startAcq()
 {
-    DEB_MEMBER_FUNCT();  
+    DEB_MEMBER_FUNCT();
     m_buffer.start();
     m_cam.startAcquisition();
 }
