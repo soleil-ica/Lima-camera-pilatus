@@ -26,6 +26,7 @@
 #include "HwFileEventMgr.h"
 #include "Debug.h"
 #include "PilatusCamera.h"
+#include "PilatusSaving.h"
 
 namespace lima
 {
@@ -139,7 +140,6 @@ public:
 
 	void setEnergy(double energy);
 	double getEnergy(void);
-	void setMxSettings(const std::string& str);
 	void setThresholdGain(int threshold, Camera::Gain gain);
 	int getThreshold(void);
 	Camera::Gain getGain(void);
@@ -155,7 +155,7 @@ private:
 	_BufferCallback* m_buffer_cbk;
 	HwTmpfsBufferMgr m_buffer;
 	SyncCtrlObj m_sync;
-	double m_latency;
+	SavingCtrlObj m_saving;
 };
 
 } // namespace Pilatus

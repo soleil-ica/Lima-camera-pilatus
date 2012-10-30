@@ -222,6 +222,7 @@ bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
     switch (trig_mode)
     {
     case IntTrig:
+    case IntTrigMult:
     case ExtTrigSingle:
     case ExtTrigMult:
     case ExtGate:
@@ -457,7 +458,8 @@ Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
 		m_buffer_cbk(new Interface::_BufferCallback(*this)),
                 m_buffer(WATCH_PATH,FILE_PATTERN,
 			 *m_buffer_cbk),
-                m_sync(cam,m_det_info)
+                m_sync(cam,m_det_info),
+		m_saving(cam)
 {
     DEB_CONSTRUCTOR();
 
@@ -470,6 +472,8 @@ Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
     HwSyncCtrlObj *sync = &m_sync;
     m_cap_list.push_back(HwCap(sync));
 
+    HwSavingCtrlObj *saving = &m_saving;
+    m_cap_list.push_back(HwCap(saving));
 }
 
 //-----------------------------------------------------
@@ -518,7 +522,10 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    m_buffer.prepare();
+    if(m_saving.isActive())
+      m_saving.prepare();
+    else
+      m_buffer.prepare();
     m_sync.prepareAcq();
 
 }
@@ -529,7 +536,12 @@ void Interface::prepareAcq()
 void Interface::startAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_buffer.start();
+
+    if(m_saving.isActive())
+      m_saving.start();
+    else
+      m_buffer.start();
+
     m_cam.startAcquisition();
 }
 
@@ -539,9 +551,13 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_buffer.stop();    
-    m_cam.stopAcquisition();
 
+    if(m_saving.isActive())
+      m_saving.stop();
+    else
+      m_buffer.stop();
+
+    m_cam.stopAcquisition();
 }
 
 //-----------------------------------------------------
@@ -551,19 +567,22 @@ void Interface::getStatus(StatusType& status)
 {
 
     DEB_MEMBER_FUNCT();
-    Camera::Status cam_status = Camera::STANDBY;
-    cam_status = m_cam.status();
+    Camera::Status cam_status = m_cam.status();
 
     if(cam_status == Camera::STANDBY)
     {
 	status.det = DetIdle;
-
-        int nbFrames;
-        m_sync.getNbHwFrames(nbFrames);
-	if(m_buffer.isStopped())
-	  status.acq = AcqReady;
+	if(!m_saving.isActive())
+	  {
+	    int nbFrames;
+	    m_sync.getNbHwFrames(nbFrames);
+	    if(m_buffer.isStopped())
+	      status.acq = AcqReady;
+	    else
+	      status.acq = getNbHwAcquiredFrames() >= nbFrames ? AcqReady : AcqRunning;
+	  }
 	else
-	  status.acq = getNbHwAcquiredFrames() >= nbFrames ? AcqReady : AcqRunning;
+	  status.acq = AcqReady;
     }
     else if(cam_status == Camera::DISCONNECTED ||
 	    cam_status == Camera::ERROR)
@@ -576,7 +595,7 @@ void Interface::getStatus(StatusType& status)
         status.det = DetExposure;
         status.acq = AcqRunning;       
     }    
-    status.det_mask = DetExposure | DetReadout | DetLatency;
+    status.det_mask = DetExposure;
 }
 
 //-----------------------------------------------------
@@ -587,15 +606,6 @@ int Interface::getNbHwAcquiredFrames()
     DEB_MEMBER_FUNCT();
     int acq_frames = m_buffer.getLastAcquiredFrame()+1;
     return acq_frames;
-}
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Interface::setMxSettings(const std::string& str)
-{
-    std::string str_to_send ="mxsettings ";
-    str_to_send+=str;
-    m_cam.sendAnyCommand(str_to_send);
 }
 
 //-----------------------------------------------------

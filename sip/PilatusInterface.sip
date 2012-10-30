@@ -82,7 +82,6 @@ namespace Pilatus
 
     void setEnergy(double energy);
     double getEnergy();
-    void setMxSettings(const std::string& str);
     void setThresholdGain(int threshold, Pilatus::Camera::Gain gain);
     int getThreshold();
     Pilatus::Camera::Gain getGain();

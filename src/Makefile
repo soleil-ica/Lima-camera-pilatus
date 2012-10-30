@@ -1,14 +1,14 @@
-pilatus-objs = PilatusCamera.o PilatusInterface.o
+pilatus-objs = PilatusCamera.o PilatusInterface.o PilatusSaving.o
 
 SRCS = $(pilatus-objs:.o=.cpp) 
 
 CXXFLAGS += -I../include -I../../../hardware/include -I../../../common/include \
-	-Wall -pthread -fPIC -g
+	-I../../../third-party/CBFLib/include -Wall -pthread -fPIC -g
 
 all:	Pilatus.o
 
 Pilatus.o:	$(pilatus-objs)
-	$(LD) -o $@ -r $+
+	$(LD) -o $@ -r $+ ../../../third-party/CBFLib/lib/libcbf.a
 
 clean:
 	rm -f *.o *.P

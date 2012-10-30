@@ -938,7 +938,8 @@ void Camera::startAcquisition(int image_number)
       msg << "exposure " << filename;
 
     send(msg.str());
-    if(m_trigger_mode != Camera::INTERNAL_SINGLE || m_trigger_mode != Camera::INTERNAL_MULTI)
+    if(m_trigger_mode != Camera::INTERNAL_SINGLE || 
+       m_trigger_mode != Camera::INTERNAL_MULTI)
         m_cond.wait(TIME_OUT);
 
 }
@@ -999,6 +1000,32 @@ void Camera::sendAnyCommand(const std::string& message)
     send(message);
 }
 
+std::string Camera::sendAnyCommandAndGetErrorMsg(const std::string& message)
+{
+  DEB_MEMBER_FUNCT();
+
+  AutoMutex aLock(m_cond.mutex());
+  RECONNECT_WAIT_UNTIL(Camera::STANDBY,
+		       "Could not send the Command, server is not idle");
+
+  m_state = Camera::ANYCMD;
+  send(message);
+
+  while(m_state != Camera::STANDBY &&
+	m_state != Camera::ERROR &&
+	m_state != Camera::DISCONNECTED)
+    {
+      if(!m_cond.wait(TIME_OUT))
+	return "Timeout";
+    }
+
+  if(m_state == Camera::ERROR)
+    return m_error_message;
+  else if(m_state == Camera::DISCONNECTED)
+    return "Disconnected";
+  else
+    return "";
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------

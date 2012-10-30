@@ -48,7 +48,8 @@ public:
         SETTING_HARDWARE_TRIGGER_DELAY,
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
-        RUNNING
+        RUNNING,
+	ANYCMD
     };
 
     enum Gain
@@ -120,6 +121,7 @@ public:
     void send(const std::string& message);
     
     void sendAnyCommand(const std::string& message);    
+    std::string sendAnyCommandAndGetErrorMsg(const std::string& message);
 
     int nbAcquiredImages() const;
     
