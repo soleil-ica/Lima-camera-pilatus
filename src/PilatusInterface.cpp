@@ -342,7 +342,7 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
     double max_time = 1e6;
     valid_ranges.min_exp_time = min_time;
     valid_ranges.max_exp_time = max_time;
-    valid_ranges.min_lat_time = min_time;
+    valid_ranges.min_lat_time = m_latency;
     valid_ranges.max_lat_time = max_time;
 }
 
