@@ -513,6 +513,10 @@ void Interface::reset(ResetLevel reset_level)
 
     m_buffer.setNbConcatFrames(1);
     m_buffer.setNbBuffers(1);
+    if(reset_level == HardReset)
+        m_cam.hardReset();
+    else
+	m_cam.softReset();
 }
 
 //-----------------------------------------------------
@@ -596,6 +600,7 @@ void Interface::getStatus(StatusType& status)
         status.acq = AcqRunning;       
     }    
     status.det_mask = DetExposure;
+    DEB_TRACE() << DEB_VAR2(cam_status,status);
 }
 
 //-----------------------------------------------------

@@ -30,8 +30,10 @@ namespace lima
 {
 namespace Pilatus
 {
+class Interface;
 class Camera
 {
+    friend class Interface;
     DEB_CLASS_NAMESPC(DebModCameraCom,"Camera","Pilatus");
 
 public:
