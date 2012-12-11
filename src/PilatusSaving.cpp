@@ -19,8 +19,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
-#include <cbf.h>
-#include <cbf_simple.h>
+#ifdef WITH_CBF_SAVING
+    #include <cbf.h>
+    #include <cbf_simple.h>
+#endif
 #include "PilatusSaving.h"
 #include "PilatusCamera.h"
 
@@ -40,12 +42,15 @@ SavingCtrlObj::~SavingCtrlObj()
 
 void SavingCtrlObj::getPossibleSaveFormat(std::list<std::string> &format_list) const
 {
-  format_list.push_back(HwSavingCtrlObj::CBF_FORMAT_STR);
+#ifdef WITH_CBF_SAVING  
+    format_list.push_back(HwSavingCtrlObj::CBF_FORMAT_STR);
+#endif    
 }
 
 void SavingCtrlObj::readFrame(HwFrameInfoType &frame_info,int frame_nr)
 {
   DEB_MEMBER_FUNCT();
+#ifdef WITH_CBF_SAVING  
   FrameDim anImageDim;
   std::string errmsg;
   std::string fullPath = _getFullPath(frame_nr);
@@ -100,6 +105,7 @@ void SavingCtrlObj::readFrame(HwFrameInfoType &frame_info,int frame_nr)
   fclose(fd);
   if(!errmsg.empty())
     THROW_HW_ERROR(Error) << errmsg;
+#endif
 }
 
 void SavingCtrlObj::setCommonHeader(const HeaderMap &header)
@@ -123,7 +129,7 @@ void SavingCtrlObj::setCommonHeader(const HeaderMap &header)
 void SavingCtrlObj::_prepare()
 {
   DEB_MEMBER_FUNCT();
-
+#ifdef WITH_CBF_SAVING
   if(m_suffix != ".cbf")
     THROW_HW_ERROR(lima::Error) << "Suffix must be .cbf";
 
@@ -135,5 +141,9 @@ void SavingCtrlObj::_prepare()
   filename += number;
   filename += m_suffix;
   m_cam.setFileName(filename);
+#else
+    THROW_CTL_ERROR(NotSupported) << "Lima is not compiled with the cbf "
+                                     "saving option, not managed";  
+#endif  
 }
 
