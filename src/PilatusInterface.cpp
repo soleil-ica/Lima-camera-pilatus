@@ -1,18 +1,110 @@
+//###########################################################################
+// This file is part of LImA, a Library for Image Acquisition
+//
+// Copyright (C) : 2009-2011
+// European Synchrotron Radiation Facility
+// BP 220, Grenoble 38043
+// FRANCE
+//
+// This is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 3 of the License, or
+// (at your option) any later version.
+//
+// This software is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, see <http://www.gnu.org/licenses/>.
+//###########################################################################
 #include <algorithm>
+#include <fcntl.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/types.h>
 #include "Debug.h"
-#include "Data.h"
-#include "PilatusReader.h"
 #include "PilatusInterface.h"
 
+using namespace lima;
+using namespace lima::Pilatus;
 
+static const char* CAMERA_INFO_FILE = "p2_det/config/cam_data/camera.def";
+static const char* CAMERA_DEFAULT_USER= "det";
+
+static const char CAMERA_NAME_TOKEN[] = "camera_name";
+static const char CAMERA_WIDE_TOKEN[] = "camera_wide";
+static const char CAMERA_HIGH_TOKEN[] = "camera_high";
+
+static const char WATCH_PATH[] = "/lima_data";
+static const char FILE_PATTERN[] = "tmp_img_%.5d.edf";
+static const int  DECTRIS_EDF_OFFSET = 1024;
 
 /*******************************************************************
  * \brief DetInfoCtrlObj constructor
+ * \param info if info is NULL look for ~det/p2_det/config/cam_data/camera.def file
  *******************************************************************/
-DetInfoCtrlObj::DetInfoCtrlObj(Camera& cam)
-                :m_cam(cam)
+DetInfoCtrlObj::DetInfoCtrlObj(const DetInfoCtrlObj::Info* info)
 {
     DEB_CONSTRUCTOR();
+    if(info)
+      m_info = *info;
+    else			// look for local file
+      {
+	char aBuffer[2048];
+	struct passwd aPwd;
+	struct passwd *aResultPwd;
+	if(getpwnam_r(CAMERA_DEFAULT_USER,&aPwd,
+		       aBuffer,sizeof(aBuffer),
+		      &aResultPwd))
+	  THROW_HW_ERROR(Error) << "Can't get information of user : " 
+				<< CAMERA_DEFAULT_USER;
+	
+	char aConfigFullPath[1024];
+	snprintf(aConfigFullPath,sizeof(aConfigFullPath),
+		 "%s/%s",aPwd.pw_dir,CAMERA_INFO_FILE);
+	FILE* aConfFile = fopen(aConfigFullPath,"r");
+	if(!aConfFile)
+	  THROW_HW_ERROR(Error) << "Can't open config file :"
+				<< aConfigFullPath;
+	char aReadBuffer[1024];
+	int aWidth = -1,aHeight = -1;
+	while(fgets(aReadBuffer,sizeof(aReadBuffer),aConfFile))
+	  {
+	    if(!strncmp(aReadBuffer,
+			CAMERA_NAME_TOKEN,sizeof(CAMERA_NAME_TOKEN) - 1))
+	      {
+		char *aBeginPt = strchr(aReadBuffer,(unsigned int)'"');
+		++aBeginPt;
+		char *aEndPt = strrchr(aBeginPt,(unsigned int)'"');
+		*aEndPt = '\0';	// remove last "
+		m_info.m_det_model = aBeginPt;
+	      }
+	    else if(!strncmp(aReadBuffer,
+			     CAMERA_HIGH_TOKEN,sizeof(CAMERA_HIGH_TOKEN) - 1))
+	      {
+		char *aPt = aReadBuffer;
+		while(*aPt && (*aPt < '1' || *aPt > '9')) ++aPt;
+		aHeight = atoi(aPt);
+	      }
+	    else if(!strncmp(aReadBuffer,
+			     CAMERA_WIDE_TOKEN,sizeof(CAMERA_WIDE_TOKEN) - 1))
+	      {
+		char *aPt = aReadBuffer;
+		while(*aPt && (*aPt < '1' || *aPt > '9')) ++aPt;
+		aWidth = atoi(aPt);
+	      }
+	  }
+	if(aWidth <= 0 || aHeight <= 0)
+	  {
+	    fclose(aConfFile);
+	    THROW_HW_ERROR(Error) << "Can't get detector info";
+	  }
+	m_info.m_det_size = Size(aWidth,aHeight);
+	fclose(aConfFile);
+      }
 }
 
 //-----------------------------------------------------
@@ -40,7 +132,7 @@ void DetInfoCtrlObj::getDetectorImageSize(Size& size)
 {
     DEB_MEMBER_FUNCT();
     // get the max image size of the detector
-    size= Size(PILATUS_6M_WIDTH,PILATUS_6M_HEIGHT);
+    size = m_info.m_det_size;
 }
 
 
@@ -59,7 +151,7 @@ void DetInfoCtrlObj::getDefImageType(ImageType& image_type)
 void DetInfoCtrlObj::getCurrImageType(ImageType& image_type)
 {
     DEB_MEMBER_FUNCT();
-    image_type= Bpp32;
+    image_type= Bpp32S;
 }
 
 //-----------------------------------------------------
@@ -80,7 +172,7 @@ void DetInfoCtrlObj::setCurrImageType(ImageType image_type)
 void DetInfoCtrlObj::getPixelSize(double& x_size,double& y_size)
 {
     DEB_MEMBER_FUNCT();
-    x_size = y_size = 172.0;
+    x_size = y_size = 172.0e-6;
 }
 
 //-----------------------------------------------------
@@ -99,194 +191,7 @@ void DetInfoCtrlObj::getDetectorType(std::string& type)
 void DetInfoCtrlObj::getDetectorModel(std::string& model)
 {
     DEB_MEMBER_FUNCT();
-    model = "Pilatus_6M";
-}
-
-/*******************************************************************
- * \brief BufferCtrlObj constructor
- *******************************************************************/
-
-BufferCtrlObj::BufferCtrlObj(Camera& cam, DetInfoCtrlObj& det)
-                :
-                    m_buffer_cb_mgr(m_buffer_alloc_mgr),
-                    m_buffer_ctrl_mgr(m_buffer_cb_mgr),
-                    m_cam(cam),
-                    m_det(det)
-{
-    DEB_CONSTRUCTOR();
-    m_reader = new Reader(cam,*this);
-    m_reader->go(2000);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-BufferCtrlObj::~BufferCtrlObj()
-{
-    DEB_DESTRUCTOR();
-	m_reader->stop(true);
-    m_reader->exit();
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::setFrameDim(const FrameDim& frame_dim)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.setFrameDim(frame_dim);
-    return;
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getFrameDim(FrameDim& frame_dim)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.getFrameDim(frame_dim);//remove or not ??
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::start()
-{
-    DEB_MEMBER_FUNCT();
-    m_reader->start();
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::stop()
-{
-    DEB_MEMBER_FUNCT();
-	m_reader->stop(true);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::reset()
-{
-    DEB_MEMBER_FUNCT();
-    m_reader->reset();
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::setNbBuffers(int nb_buffers)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.setNbBuffers(nb_buffers);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getNbBuffers(int& nb_buffers)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.getNbBuffers(nb_buffers);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::setNbConcatFrames(int nb_concat_frames)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.setNbConcatFrames(nb_concat_frames);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getNbConcatFrames(int& nb_concat_frames)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.getNbConcatFrames(nb_concat_frames);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getMaxNbBuffers(int& max_nb_buffers)
-{
-    DEB_MEMBER_FUNCT();
-
-    Size imageSize;
-    m_det.getMaxImageSize(imageSize);
-    max_nb_buffers = ( (Camera::DEFAULT_TMPFS_SIZE)/(imageSize.getWidth() * imageSize.getHeight() * 4) ); //4 == image 32bits
-    m_buffer_ctrl_mgr.getMaxNbBuffers(max_nb_buffers);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void *BufferCtrlObj::getBufferPtr(int buffer_nb, int concat_frame_nb)
-{
-    DEB_MEMBER_FUNCT();
-    return m_buffer_ctrl_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void *BufferCtrlObj::getFramePtr(int acq_frame_nb)
-{
-    DEB_MEMBER_FUNCT();
-    return m_buffer_ctrl_mgr.getFramePtr(acq_frame_nb);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-int BufferCtrlObj::getLastAcquiredFrame()
-{
-    return m_reader->getLastAcquiredFrame();
-}
-
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getStartTimestamp(Timestamp& start_ts)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.getStartTimestamp(start_ts);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::getFrameInfo(int acq_frame_nb, HwFrameInfoType& info)
-{
-    DEB_MEMBER_FUNCT();
-    m_buffer_ctrl_mgr.getFrameInfo(acq_frame_nb, info);
-}
-
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::registerFrameCallback(HwFrameCallback& frame_cb)
-{
-    DEB_MEMBER_FUNCT();
-    //@TODO
-    m_buffer_ctrl_mgr.registerFrameCallback(frame_cb);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
-{
-    DEB_MEMBER_FUNCT();
-    //@TODO
-    m_buffer_ctrl_mgr.unregisterFrameCallback(frame_cb);
+    model = m_info.m_det_model;
 }
 
 
@@ -295,8 +200,8 @@ void BufferCtrlObj::unregisterFrameCallback(HwFrameCallback& frame_cb)
  * \brief SyncCtrlObj constructor
  *******************************************************************/
 
-SyncCtrlObj::SyncCtrlObj(Camera& cam)
-            :  m_cam(cam),m_latency(LATENCY_DEFAULT_VALUE)
+SyncCtrlObj::SyncCtrlObj(Camera& cam,DetInfoCtrlObj &det_info)
+  :  m_cam(cam),m_latency(det_info.getMinLatTime())
 
 {
 }
@@ -317,6 +222,7 @@ bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
     switch (trig_mode)
     {
     case IntTrig:
+    case IntTrigMult:
     case ExtTrigSingle:
     case ExtTrigMult:
     case ExtGate:
@@ -351,6 +257,7 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
         break;
         case ExtGate        : trig = Camera::EXTERNAL_GATE;
         break;
+	default: break;
     }
 
     m_cam.setTriggerMode(trig);
@@ -436,14 +343,14 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
     double max_time = 1e6;
     valid_ranges.min_exp_time = min_time;
     valid_ranges.max_exp_time = max_time;
-    valid_ranges.min_lat_time = min_time;
+    valid_ranges.min_lat_time = m_latency;
     valid_ranges.max_lat_time = max_time;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void SyncCtrlObj:: prepareAcq()
+void SyncCtrlObj::prepareAcq()
 {
 
     double exposure =  m_exposure_requested;
@@ -458,16 +365,101 @@ void SyncCtrlObj:: prepareAcq()
 
 }
 
+/*******************************************************************
+ * \brief Interface::_BufferCallback
+ *******************************************************************/
+class Interface::_BufferCallback : public HwTmpfsBufferMgr::Callback
+{
+  DEB_CLASS_NAMESPC(DebModCamera, "_BufferCallback", "Pilatus");
+public:
+  _BufferCallback(Interface& hwInterface) : m_interface(hwInterface) {}
+
+  virtual void prepare(const DirectoryEvent::Parameters &params)
+  {
+    DEB_MEMBER_FUNCT();
+
+    m_interface.m_cam.setImgpath(params.watch_path);
+    m_interface.m_cam.setFileName(params.file_pattern);
+  }
+
+  virtual bool getFrameInfo(int image_number,const char* full_path,
+			    HwFileEventCallbackHelper::CallFrom from,
+			    HwFrameInfoType &frame_info)
+  {
+    DEB_MEMBER_FUNCT();
+
+    FrameDim anImageDim;
+    getFrameDim(anImageDim);
+  
+    void *aDataBuffer;
+    if(posix_memalign(&aDataBuffer,16,anImageDim.getMemSize()))
+      THROW_HW_ERROR(Error) << "Can't allocate memory";
+
+    int fd = open(full_path,O_RDONLY);
+    if(fd < 0)
+      {
+	free(aDataBuffer);
+	if(from == HwFileEventCallbackHelper::OnDemand)
+	  THROW_HW_ERROR(Error) << "Image is no more available";
+	else
+	  {
+	    m_interface.m_cam.errorStopAcquisition();
+	    THROW_HW_ERROR(Error) << "Can't open file:" << DEB_VAR1(full_path);
+	  }
+      }
+  
+    lseek(fd,DECTRIS_EDF_OFFSET,SEEK_SET);
+    ssize_t aReadSize = read(fd,aDataBuffer,anImageDim.getMemSize());
+    if(aReadSize != anImageDim.getMemSize())
+      {
+	close(fd),free(aDataBuffer);
+	m_interface.m_cam.errorStopAcquisition();
+	THROW_HW_ERROR(Error) << "Problem to read image:" << DEB_VAR1(full_path);
+      }
+    close(fd);
+    
+    frame_info = HwFrameInfoType(image_number,aDataBuffer,&anImageDim,
+				 Timestamp(),0,
+				 HwFrameInfoType::Shared);
+    bool aReturnFlag = true;
+    if(m_interface.m_buffer.getNbOfFramePending() > 32)
+      {
+	m_interface.m_cam.errorStopAcquisition();
+	aReturnFlag = false;
+      }
+    else
+      aReturnFlag = (image_number + 1) != m_interface.m_cam.nbImagesInSequence();
+
+    return aReturnFlag;
+  }
+  virtual void getFrameDim(FrameDim& frame_dim)
+  {
+    DEB_MEMBER_FUNCT();
+
+    Size current_size;
+    m_interface.m_det_info.getDetectorImageSize(current_size);
+    ImageType current_image_type;
+    m_interface.m_det_info.getCurrImageType(current_image_type);
+    
+    frame_dim.setSize(current_size);
+    frame_dim.setImageType(current_image_type);
+  }
+private:
+  Interface&	m_interface;
+};
 
 /*******************************************************************
  * \brief Hw Interface constructor
  *******************************************************************/
 
-Interface::Interface(Camera& cam)
+Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
             :   m_cam(cam),
-                m_det_info(cam),
-                m_buffer(cam,m_det_info ),
-                m_sync(cam)
+                m_det_info(info),
+		m_buffer_cbk(new Interface::_BufferCallback(*this)),
+                m_buffer(WATCH_PATH,FILE_PATTERN,
+			 *m_buffer_cbk),
+                m_sync(cam,m_det_info),
+		m_saving(cam)
 {
     DEB_CONSTRUCTOR();
 
@@ -480,6 +472,8 @@ Interface::Interface(Camera& cam)
     HwSyncCtrlObj *sync = &m_sync;
     m_cap_list.push_back(HwCap(sync));
 
+    HwSavingCtrlObj *saving = &m_saving;
+    m_cap_list.push_back(HwCap(saving));
 }
 
 //-----------------------------------------------------
@@ -488,6 +482,7 @@ Interface::Interface(Camera& cam)
 Interface::~Interface()
 {
     DEB_DESTRUCTOR();
+    delete m_buffer_cbk;
 }
 
 //-----------------------------------------------------
@@ -518,6 +513,10 @@ void Interface::reset(ResetLevel reset_level)
 
     m_buffer.setNbConcatFrames(1);
     m_buffer.setNbBuffers(1);
+    if(reset_level == HardReset)
+        m_cam.hardReset();
+    else
+	m_cam.softReset();
 }
 
 //-----------------------------------------------------
@@ -527,11 +526,10 @@ void Interface::prepareAcq()
 {
     DEB_MEMBER_FUNCT();
 
-    Camera::Status cam_status = Camera::OK;
-    cam_status = m_cam.status();
-    if (cam_status == Camera::DISCONNECTED)
-        m_cam.connect(m_cam.serverIP().c_str(),m_cam.serverPort());
-    m_buffer.reset();
+    if(m_saving.isActive())
+      m_saving.prepare();
+    else
+      m_buffer.prepare();
     m_sync.prepareAcq();
 
 }
@@ -541,9 +539,14 @@ void Interface::prepareAcq()
 //-----------------------------------------------------
 void Interface::startAcq()
 {
-    DEB_MEMBER_FUNCT();  
+    DEB_MEMBER_FUNCT();
+
+    if(m_saving.isActive())
+      m_saving.start();
+    else
+      m_buffer.start();
+
     m_cam.startAcquisition();
-    m_buffer.start();
 }
 
 //-----------------------------------------------------
@@ -552,9 +555,13 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_buffer.stop();    
-    m_cam.stopAcquisition();
 
+    if(m_saving.isActive())
+      m_saving.stop();
+    else
+      m_buffer.stop();
+
+    m_cam.stopAcquisition();
 }
 
 //-----------------------------------------------------
@@ -564,34 +571,27 @@ void Interface::getStatus(StatusType& status)
 {
 
     DEB_MEMBER_FUNCT();
-    Camera::Status cam_status = Camera::STANDBY;
-    cam_status = m_cam.status();
+    Camera::Status cam_status = m_cam.status();
 
-    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION || cam_status == Camera::OK)
+    if(cam_status == Camera::STANDBY)
     {
 	status.det = DetIdle;
-
-        int nbFrames = 0;
-        m_sync.getNbHwFrames(nbFrames);
-        if(getNbHwAcquiredFrames() >= nbFrames || cam_status == Camera::OK)
-	{
-            status.acq = AcqReady;        
-	}
-        else
-	{
-            status.acq = AcqRunning;
-	}
-
-        status.acq = AcqReady; 
+	if(!m_saving.isActive())
+	  {
+	    int nbFrames;
+	    m_sync.getNbHwFrames(nbFrames);
+	    if(m_buffer.isStopped())
+	      status.acq = AcqReady;
+	    else
+	      status.acq = getNbHwAcquiredFrames() >= nbFrames ? AcqReady : AcqRunning;
+	  }
+	else
+	  status.acq = AcqReady;
     }
-    else if(cam_status == Camera::DISCONNECTED)
+    else if(cam_status == Camera::DISCONNECTED ||
+	    cam_status == Camera::ERROR)
     {
         status.det = DetFault;
-        status.acq = AcqFault;
-    }
-    else if(cam_status == Camera::ERROR)
-    {
-        status.det = DetIdle;
         status.acq = AcqFault;
     }
     else
@@ -599,8 +599,8 @@ void Interface::getStatus(StatusType& status)
         status.det = DetExposure;
         status.acq = AcqRunning;       
     }    
-    status.det_mask = DetExposure | DetReadout | DetLatency;
-
+    status.det_mask = DetExposure;
+    DEB_TRACE() << DEB_VAR2(cam_status,status);
 }
 
 //-----------------------------------------------------
@@ -611,68 +611,6 @@ int Interface::getNbHwAcquiredFrames()
     DEB_MEMBER_FUNCT();
     int acq_frames = m_buffer.getLastAcquiredFrame()+1;
     return acq_frames;
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Interface::setLatency(double latency)
-{
-   m_sync.setLatTime(latency);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-double Interface::getLatency(void)
-{
-   double latency = LATENCY_DEFAULT_VALUE;
-   m_sync.getLatTime(latency);
-   return latency;   
-}
-    
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Interface::setImagePath(const std::string& path)
-{
-    m_cam.setImgpath(path);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-const std::string& Interface::getImagePath(void)
-{
-    return m_cam.imgpath();
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Interface::setFileName(const std::string& name)
-{
-     m_cam.setFileName(name);
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-const std::string& Interface::getFileName(void)
-{
-    return  m_cam.fileName();
-}
-    
-    
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Interface::setMxSettings(const std::string& str)
-{
-    std::string str_to_send ="mxsettings ";
-    str_to_send+=str;
-    m_cam.sendAnyCommand(str_to_send);
 }
 
 //-----------------------------------------------------
