@@ -1,39 +1,18 @@
-//###########################################################################
-// This file is part of LImA, a Library for Image Acquisition
-//
-// Copyright (C) : 2009-2011
-// European Synchrotron Radiation Facility
-// BP 220, Grenoble 38043
-// FRANCE
-//
-// This is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 3 of the License, or
-// (at your option) any later version.
-//
-// This software is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, see <http://www.gnu.org/licenses/>.
-//###########################################################################
 #ifndef PILATUSCAMERA_H
 #define PILATUSCAMERA_H
 
 #include "Debug.h"
 
 
+static const char  SOCKET_SEPARATOR = '\030';
+static const char* SPLIT_SEPARATOR  = "\x18"; // '\x18' == '\030'
 
 namespace lima
 {
 namespace Pilatus
 {
-class Interface;
 class Camera
 {
-    friend class Interface;
     DEB_CLASS_NAMESPC(DebModCameraCom,"Camera","Pilatus");
 
 public:
@@ -41,7 +20,7 @@ public:
     {
         ERROR,
         DISCONNECTED,
-        STANDBY,
+        OK,
         SETTING_ENERGY,
         SETTING_THRESHOLD,
         SETTING_EXPOSURE,
@@ -51,7 +30,8 @@ public:
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
         RUNNING,
-	ANYCMD
+        ANY,
+        STANDBY
     };
 
     enum Gain
@@ -72,19 +52,23 @@ public:
         EXTERNAL_GATE
     };
 
-    Camera(const char *host = "localhost",int port = 41234);
+    Camera(const char *host = NULL,int port = 0);
     ~Camera();
     
     void connect(const char* host,int port);
     
-    const char* serverIP() const;
+    std::string serverIP() const;
     int serverPort() const;
+    
+	void enableDirectoryWatcher(void);
+	void disableDirectoryWatcher(void);
+	bool isDirectoryWatcherEnabled();
 
     void setImgpath(const std::string& path);
-    const std::string& imgpath() const;
+    const std::string& imgpath(void);
     
     void setFileName(const std::string& name);
-    const std::string& fileName() const;
+    const std::string& fileName(void);
     
     Status status() const;
 
@@ -115,7 +99,6 @@ public:
 
     void startAcquisition(int image_number = 0);
     void stopAcquisition();
-    void errorStopAcquisition();
 
     bool gapfill() const;
     void setGapfill(bool onOff);
@@ -123,18 +106,19 @@ public:
     void send(const std::string& message);
     
     void sendAnyCommand(const std::string& message);    
-    std::string sendAnyCommandAndGetErrorMsg(const std::string& message);
 
-    int nbAcquiredImages() const;
+    int nbAcquiredImages();
+    //s
+    static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
+    static const double             TIME_OUT = 10.;
+ 
     
 private:
-    static const double             TIME_OUT = 3.;
-
+    
     const        std::string& errorMessage() const;
     void         softReset();
     void         hardReset();
     void         quit();    
-    void	 _connect(const char* host,int port);
     
     static void* _runFunc(void*);
     void         _run();    
@@ -157,8 +141,9 @@ private:
     mutable Cond            m_cond;
 
     //Cache variables
+    bool 					m_use_dw;
     std::string             m_error_message;
-    int			    m_energy;
+    double                  m_energy;
     double                  m_exposure;
     int                     m_exposure_per_frame;
     double                  m_exposure_period;
@@ -171,8 +156,7 @@ private:
     std::string             m_imgpath;
     std::string             m_file_name;
     std::string             m_file_pattern;    
-    int			    m_nb_acquired_images;
-    bool		    m_has_cmd_setenergy;
+    int						m_nb_acquired_images;
 };
 }
 }

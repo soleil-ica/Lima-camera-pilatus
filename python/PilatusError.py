@@ -19,19 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 ############################################################################
-from Lima import module_helper
-
-mod_path = __path__
-depends_on = 'Core'
-has_dependent = False
-
-cleanup_data = module_helper.load_prepare(mod_path, depends_on, has_dependent)
-
-from Lima import Core
-
-cleanup_data = module_helper.load_dep_cleanup(cleanup_data)
-
-module_helper.load_cleanup(cleanup_data)
-
-del mod_path, depends_on, has_dependent, cleanup_data
-del module_helper
+class PilatusError(Exception) :
+    def __init__(self,msg) :
+        self.__message = msg
+    def __str__(self) :
+        return self.__message
