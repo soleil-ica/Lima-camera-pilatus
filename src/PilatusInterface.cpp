@@ -474,6 +474,8 @@ Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
 
     HwSavingCtrlObj *saving = &m_saving;
     m_cap_list.push_back(HwCap(saving));
+
+    m_buffer.getDirectoryEvent().watch_moved_to();
 }
 
 //-----------------------------------------------------
