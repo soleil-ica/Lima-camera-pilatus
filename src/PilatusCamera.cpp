@@ -305,6 +305,18 @@ void Camera::_pilatus3model()
   m_pilatus3_threshold_mode = true;
 }
 //-----------------------------------------------------
+// This method will reset threshold if it's a pilatus3 
+// and bugged version
+//-----------------------------------------------------
+void Camera::_work_around_threshold_bug()
+{
+  if(m_pilatus3_threshold_mode &&
+     m_major_version <= 7 &&
+     m_minor_version <= 4 &&
+     m_patch_version <= 3)
+    send("setthreshold 0");
+}
+//-----------------------------------------------------
 //
 //-----------------------------------------------------
 void Camera::send(const std::string& message)
@@ -721,6 +733,8 @@ void Camera::setEnergy(double val)
 			 "Could not set energy, server is not idle");
     if(m_has_cmd_setenergy)
       {
+	_work_around_threshold_bug();
+
 	m_state = Camera::SETTING_ENERGY;
 	std::stringstream msg;
 	msg << "setenergy " << val*1000;
@@ -806,6 +820,8 @@ void Camera::setThreshold(int threshold,int energy)
   AutoMutex aLock(m_cond.mutex());
   RECONNECT_WAIT_UNTIL(Camera::STANDBY,
 		       "Could not set threshold,server is not idle");
+
+  _work_around_threshold_bug();
 
   m_state = Camera::SETTING_THRESHOLD;
   if(energy < 0)

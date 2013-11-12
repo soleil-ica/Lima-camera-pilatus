@@ -143,6 +143,7 @@ private:
     void         _resync();
     void         _reinit();
     void	 _pilatus3model(); ///< set pilatus3 threshold extention
+    void         _work_around_threshold_bug();
 
     std::map<std::string,Gain>    GAIN_SERVER_RESPONSE;
     std::map<Gain,std::string>    GAIN_VALUE2SERVER;
