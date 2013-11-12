@@ -37,6 +37,7 @@ static const char* CAMERA_DEFAULT_USER= "det";
 static const char CAMERA_NAME_TOKEN[] = "camera_name";
 static const char CAMERA_WIDE_TOKEN[] = "camera_wide";
 static const char CAMERA_HIGH_TOKEN[] = "camera_high";
+static const char CAMERA_PILATUS3_TOKEN[] = "PILATUS3";
 
 static const char WATCH_PATH[] = "/lima_data";
 static const char FILE_PATTERN[] = "tmp_img_%.5d.edf";
@@ -81,6 +82,8 @@ DetInfoCtrlObj::DetInfoCtrlObj(const DetInfoCtrlObj::Info* info)
 		char *aEndPt = strrchr(aBeginPt,(unsigned int)'"');
 		*aEndPt = '\0';	// remove last "
 		m_info.m_det_model = aBeginPt;
+		//Check if pilatus2 or 3
+		m_is_pilatus3 = !strncmp(aBeginPt,CAMERA_PILATUS3_TOKEN,sizeof(CAMERA_PILATUS3_TOKEN) - 1);
 	      }
 	    else if(!strncmp(aReadBuffer,
 			     CAMERA_HIGH_TOKEN,sizeof(CAMERA_HIGH_TOKEN) - 1))
@@ -193,8 +196,13 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
     DEB_MEMBER_FUNCT();
     model = m_info.m_det_model;
 }
-
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double DetInfoCtrlObj::getMinLatTime() const
+{
+  return m_is_pilatus3 ? 900e-6 : 3e-3;
+}
 
 /*******************************************************************
  * \brief SyncCtrlObj constructor
@@ -476,6 +484,9 @@ Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
     m_cap_list.push_back(HwCap(saving));
 
     m_buffer.getDirectoryEvent().watch_moved_to();
+
+    //Activate new pilatus3 threshold method
+    if(m_det_info.isPilatus3()) cam._pilatus3model();
 }
 
 //-----------------------------------------------------
@@ -622,7 +633,13 @@ void Interface::setThresholdGain(int threshold, Camera::Gain gain)
 {
     m_cam.setThresholdGain(threshold, gain);
 }
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setThreshold(int threshold,int energy)
+{
+  m_cam.setThreshold(threshold,energy);
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------

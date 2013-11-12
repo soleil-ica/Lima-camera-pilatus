@@ -107,7 +107,9 @@ Camera::Camera(const char *host,int port)
                     m_stop(false),
                     m_thread_id(0),
                     m_state(DISCONNECTED),
-                    m_nb_acquired_images(0)
+                    m_nb_acquired_images(0),
+		    m_has_cmd_setenergy(true),
+		    m_pilatus3_threshold_mode(false)
 {
     DEB_CONSTRUCTOR();
     m_server_ip         = host;
@@ -291,7 +293,13 @@ void Camera::_reinit()
     _resync();
     send("nimages");
 }
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::_pilatus3model()
+{
+  m_pilatus3_threshold_mode = true;
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -760,7 +768,34 @@ void Camera::setThresholdGain(int value,Camera::Gain gain)
     if (m_gap_fill)
         send("gapfill -1");
 }
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setThreshold(int threshold,int energy)
+{
+  DEB_MEMBER_FUNCT();
 
+  if(!m_pilatus3_threshold_mode)
+    THROW_HW_ERROR(NotSupported) << "Could not use pilatus threshold flavor";
+
+  AutoMutex aLock(m_cond.mutex());
+  RECONNECT_WAIT_UNTIL(Camera::STANDBY,
+		       "Could not set threshold,server is not idle");
+
+  m_state = Camera::SETTING_THRESHOLD;
+  if(energy < 0)
+    {
+      char buffer[128];
+      snprintf(buffer,sizeof(buffer),"setthreshold %d",threshold);
+      send(buffer);
+    }
+  else
+    {
+      char buffer[128];
+      snprintf(buffer,sizeof(buffer),"setthreshold energy %d %d",energy,threshold);
+      send(buffer);
+    }
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------

@@ -93,8 +93,9 @@ public:
 
     int threshold() const;
     Gain gain() const;
-    void setThresholdGain(int threshold,Gain gain = DEFAULT_GAIN);
-
+    void setThresholdGain(int threshold,Gain gain = DEFAULT_GAIN); // backward compatibility
+    void setThreshold(int threshold,int energy = -1);
+  
     double exposure() const;
     void setExposure(double expo);
 
@@ -141,7 +142,8 @@ private:
     void         _initVariable();
     void         _resync();
     void         _reinit();
-    
+    void	 _pilatus3model(); ///< set pilatus3 threshold extention
+
     std::map<std::string,Gain>    GAIN_SERVER_RESPONSE;
     std::map<Gain,std::string>    GAIN_VALUE2SERVER;
 
@@ -173,6 +175,7 @@ private:
     std::string             m_file_pattern;    
     int			    m_nb_acquired_images;
     bool		    m_has_cmd_setenergy;
+    bool                    m_pilatus3_threshold_mode;
 };
 }
 }
