@@ -109,7 +109,10 @@ Camera::Camera(const char *host,int port)
                     m_state(DISCONNECTED),
                     m_nb_acquired_images(0),
 		    m_has_cmd_setenergy(true),
-		    m_pilatus3_threshold_mode(false)
+		    m_pilatus3_threshold_mode(false),
+		    m_major_version(-1),
+		    m_minor_version(-1),
+		    m_patch_version(-1)
 {
     DEB_CONSTRUCTOR();
     m_server_ip         = host;
@@ -283,6 +286,7 @@ void Camera::_resync()
     send("nexpframe");
     send("setackint 0");
     send("dbglvl 1");
+    send("version");
 }
 
 //-----------------------------------------------------
@@ -559,6 +563,11 @@ void Camera::_run()
 			      m_has_cmd_setenergy = false;
 			      _resync();
 			    }
+			  else if(msg.find("Unrecognized command: version") != 
+				  std::string::npos)
+			    {
+			      DEB_TRACE() << "Can't retrieved camserver version";
+			    }
 			  else
 			    {
                             DEB_TRACE() << "-- ERROR";
@@ -585,6 +594,22 @@ void Camera::_run()
                             DEB_TRACE() << m_error_message;
                         }                        
                     }
+		    else if(msg.substr(0,2) == "24")
+		      {
+			if(msg.substr(3,2) == "OK" &&
+			   msg.substr(6,12) == "Code release")
+			  {
+			    DEB_TRACE() << msg.substr(6);
+			    std::vector<std::string> version_vector;
+			    _split(msg.substr(20),".",version_vector);
+			    if(version_vector.size() == 3)
+			      {
+				m_major_version = atoi(version_vector[0].c_str());
+				m_minor_version = atoi(version_vector[1].c_str());
+				m_patch_version = atoi(version_vector[2].c_str());
+			      }
+			  }
+		      }
                 }
             }
         }
@@ -1085,6 +1110,15 @@ int Camera::nbAcquiredImages() const
 
     AutoMutex aLock(m_cond.mutex());
     return m_nb_acquired_images;
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::version(int& major,int& minor,int& patch) const
+{
+  major = m_major_version;
+  minor = m_minor_version;
+  patch = m_patch_version;
 }
 
 //-----------------------------------------------------

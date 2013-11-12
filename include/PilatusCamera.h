@@ -127,7 +127,7 @@ public:
     std::string sendAnyCommandAndGetErrorMsg(const std::string& message);
 
     int nbAcquiredImages() const;
-    
+    void version(int& major,int& minor,int& patch) const;
 private:
     static const double             TIME_OUT = 3.;
 
@@ -176,6 +176,9 @@ private:
     int			    m_nb_acquired_images;
     bool		    m_has_cmd_setenergy;
     bool                    m_pilatus3_threshold_mode;
+    int			    m_major_version;
+    int                     m_minor_version;
+    int                     m_patch_version;
 };
 }
 }
