@@ -201,7 +201,7 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
 //-----------------------------------------------------
 double DetInfoCtrlObj::getMinLatTime() const
 {
-  return m_is_pilatus3 ? 900e-6 : 3e-3;
+  return m_is_pilatus3 ? 950e-6 : 3e-3;
 }
 
 /*******************************************************************
