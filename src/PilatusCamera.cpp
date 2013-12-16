@@ -528,6 +528,7 @@ void Camera::_run()
                         }
                         else  // ERROR MESSAGE
                         {
+			  m_error_message = msg.substr(7);
                             if(m_state == Camera::SETTING_THRESHOLD)
 			      DEB_TRACE() << "-- Threshold process failed";
                             if(m_state == Camera::SETTING_ENERGY)
@@ -535,10 +536,8 @@ void Camera::_run()
                             else if(m_state == Camera::RUNNING)
 			      DEB_TRACE() << "-- Exposure process failed";
                             else
-                            {
-			        DEB_TRACE() << "-- ERROR";
-                                DEB_TRACE() << msg.substr(2);
-                            }
+			      DEB_TRACE() << "-- ERROR " << m_error_message;
+
 			    m_state = Camera::ERROR;
 			}
                         m_cond.broadcast();
@@ -888,6 +887,15 @@ void Camera::setExposurePeriod(double val)
     std::stringstream msg;
     msg << "expperiod " << val;
     send(msg.str());
+    // Exposure period can failed if it's two fast
+    while(m_state == Camera::SETTING_EXPOSURE_PERIOD)
+      m_cond.wait(TIME_OUT);
+    if(m_state == Camera::ERROR)
+      {
+	m_state = Camera::STANDBY;
+	THROW_HW_ERROR(Error) << "Could not set exposure period to:"
+			      << DEB_VAR2(val,m_error_message);
+      }
 }
 
 //-----------------------------------------------------
