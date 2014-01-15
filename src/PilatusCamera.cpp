@@ -665,16 +665,19 @@ void Camera::hardReset()
 }
 
 //-----------------------------------------------------
-//
+// Return energy in keV
 //-----------------------------------------------------
 double Camera::energy() const
 {
     AutoMutex aLock(m_cond.mutex());
-    return m_energy;
+    if(m_has_cmd_setenergy)
+       return (double)m_energy/1000;
+    else
+       return (double)m_threshold/600;
 }
 
 //-----------------------------------------------------
-//
+// Set energy in keV
 //-----------------------------------------------------
 void Camera::setEnergy(double val)
 {
@@ -687,16 +690,28 @@ void Camera::setEnergy(double val)
       {
 	m_state = Camera::SETTING_ENERGY;
 	std::stringstream msg;
-	msg << "setenergy " << val;
+	msg << "setenergy " << val*1000;
 	send(msg.str());
       }
     else
-      THROW_HW_ERROR(Error) << "This version of camserver don't have this feature";
+      {
+        Camera::Gain gain;
+        int threshold;
+        // In old version of camserver,  setenergy is not implemented, emulate it instead
+        // with threshold and gain, according to rules of ranges given by Dectris support
+        threshold = (int)(val * 600); //60% of the energy in eV
+        if (val > 12) gain = LOW;
+        else if (val > 8 && val <= 12) gain = MID;
+        else if (val >= 6 && val <= 8) gain = HIGH;
+        else gain = UHIGH;
+        aLock.unlock();
+        setThresholdGain(threshold, gain);
+      }
 
 }
 
 //-----------------------------------------------------
-//
+// Return the threshold in eV
 //-----------------------------------------------------
 int Camera::threshold() const
 {
@@ -705,7 +720,7 @@ int Camera::threshold() const
 }
 
 //-----------------------------------------------------
-//
+// Return the gain
 //-----------------------------------------------------
 Camera::Gain Camera::gain() const
 {
@@ -714,7 +729,7 @@ Camera::Gain Camera::gain() const
 }
 
 //-----------------------------------------------------
-//
+// Set Threshold (ev) and gain pair
 //-----------------------------------------------------
 void Camera::setThresholdGain(int value,Camera::Gain gain)
 {
