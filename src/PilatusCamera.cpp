@@ -1006,17 +1006,6 @@ void Camera::startAcquisition(int image_number)
     if(m_state == Camera::RUNNING)
         THROW_HW_ERROR(Error) << "Could not start acquisition, you have to wait the end of the previous one";
 
-    if( m_trigger_mode != Camera::EXTERNAL_GATE)
-    {
-        while(m_exposure_period <= (m_exposure + 0.002999))
-        {
-	  std::stringstream msg;
-	  msg << "expperiod " << (m_exposure + 0.003);
-	  send(msg.str());
-	  m_cond.wait(TIME_OUT);
-        }
-    }
-
     char filename[256];
     snprintf(filename,sizeof(filename),m_file_pattern.c_str(),image_number);
 
