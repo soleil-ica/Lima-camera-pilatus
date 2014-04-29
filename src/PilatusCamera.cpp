@@ -27,6 +27,7 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <iomanip>
 
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -885,7 +886,7 @@ void Camera::setExposurePeriod(double val)
 			 "Could not set exposure period, server not idle");
     m_state = Camera::SETTING_EXPOSURE_PERIOD;
     std::stringstream msg;
-    msg << "expperiod " << val;
+    msg << std::setprecision(9) << "expperiod " << val;
     send(msg.str());
     // Exposure period can failed if it's two fast
     while(m_state == Camera::SETTING_EXPOSURE_PERIOD)
