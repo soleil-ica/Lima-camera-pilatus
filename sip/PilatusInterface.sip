@@ -66,7 +66,7 @@ namespace Pilatus
 #include <PilatusInterface.h>
 %End
   public:
-    Interface(Pilatus::Camera& cam,
+    Interface(Pilatus::Camera& cam /KeepReference/,
 	      const Pilatus::DetInfoCtrlObj::Info* = NULL);
     virtual ~Interface();
 
