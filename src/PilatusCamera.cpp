@@ -280,6 +280,7 @@ void Camera::_resync()
       send("setthreshold");
     send("exptime");
     send("expperiod");
+    send("nimages 1");
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;
     send(cmd.str());

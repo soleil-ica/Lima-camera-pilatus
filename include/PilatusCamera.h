@@ -129,7 +129,7 @@ public:
     int nbAcquiredImages() const;
     void version(int& major,int& minor,int& patch) const;
 private:
-    static const double             TIME_OUT = 3.;
+    static const double             TIME_OUT = 10.;
 
     const        std::string& errorMessage() const;
     void         softReset();
