@@ -65,6 +65,11 @@ Installation
 
       mount -a
 
+- For Pilatus3 edit file ~det/p2_det/config/cam_data/camera.def and add thoses two lines:
+
+    * camera_wide = WIDTH_OF_THE_DETECTOR
+    * camera_high = HEIGHT_OF_THE_DETECTOR 
+
 Start the system
 ````````````````
 
