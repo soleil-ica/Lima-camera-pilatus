@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include "Debug.h"
 #include "PilatusInterface.h"
 
@@ -37,6 +38,7 @@ static const char* CAMERA_DEFAULT_USER= "det";
 static const char CAMERA_NAME_TOKEN[] = "camera_name";
 static const char CAMERA_WIDE_TOKEN[] = "camera_wide";
 static const char CAMERA_HIGH_TOKEN[] = "camera_high";
+static const char CAMERA_PILATUS3_TOKEN[] = "PILATUS3";
 
 static const char WATCH_PATH[] = "/lima_data";
 static const char FILE_PATTERN[] = "tmp_img_%.5d.edf";
@@ -81,6 +83,8 @@ DetInfoCtrlObj::DetInfoCtrlObj(const DetInfoCtrlObj::Info* info)
 		char *aEndPt = strrchr(aBeginPt,(unsigned int)'"');
 		*aEndPt = '\0';	// remove last "
 		m_info.m_det_model = aBeginPt;
+		//Check if pilatus2 or 3
+		m_is_pilatus3 = !strncmp(aBeginPt,CAMERA_PILATUS3_TOKEN,sizeof(CAMERA_PILATUS3_TOKEN) - 1);
 	      }
 	    else if(!strncmp(aReadBuffer,
 			     CAMERA_HIGH_TOKEN,sizeof(CAMERA_HIGH_TOKEN) - 1))
@@ -193,8 +197,13 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
     DEB_MEMBER_FUNCT();
     model = m_info.m_det_model;
 }
-
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double DetInfoCtrlObj::getMinLatTime() const
+{
+  return m_is_pilatus3 ? 950e-6 : 3e-3;
+}
 
 /*******************************************************************
  * \brief SyncCtrlObj constructor
@@ -364,6 +373,65 @@ void SyncCtrlObj::prepareAcq()
     m_cam.setNbImagesInSequence(nb_frames);
 
 }
+/*****************************************************************************
+			  Memory map manager
+*****************************************************************************/
+class _MmapManager : public HwBufferCtrlObj::Callback
+{
+  DEB_CLASS(DebModCamera, "Pilatus::_MmapManager");
+  typedef std::pair<void*,long> AddressNSize;
+  typedef std::map<void*,AddressNSize> Data2BaseNSize;
+  typedef std::multiset<void *> BufferList;
+public:
+  _MmapManager() : HwBufferCtrlObj::Callback() {}
+  virtual void map(void* address)
+  {
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex lock(m_mutex);
+    m_buffer_in_use.insert(address);
+  }
+  virtual void release(void* address)
+  {
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex lock(m_mutex);
+    BufferList::iterator it = m_buffer_in_use.find(address);
+    if(it == m_buffer_in_use.end())
+      THROW_HW_ERROR(Error) << "Internal error: releasing buffer not in used list";
+
+    m_buffer_in_use.erase(it++);
+    if(it == m_buffer_in_use.end() || *it != address)
+      {
+	Data2BaseNSize::iterator mmap_info = m_data_2_base_n_size.find(address);
+	munmap(mmap_info->second.first,mmap_info->second.second);
+	m_data_2_base_n_size.erase(mmap_info);
+      }
+  }
+  virtual void releaseAll()
+  {
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex lock(m_mutex);
+    for(Data2BaseNSize::iterator mmap_info = m_data_2_base_n_size.begin();
+	mmap_info != m_data_2_base_n_size.end();++mmap_info)
+      munmap(mmap_info->second.first,mmap_info->second.second);
+    m_data_2_base_n_size.clear();
+    m_buffer_in_use.clear();
+  }
+
+  void register_new_mmap(void *mmap_mem_base,
+			 void *aDataBuffer,long length)
+  {
+    AutoMutex lock(m_mutex);
+    m_data_2_base_n_size[aDataBuffer] = AddressNSize(mmap_mem_base,length);
+  }
+  
+private:
+  Mutex			m_mutex;
+  Data2BaseNSize	m_data_2_base_n_size;
+  BufferList		m_buffer_in_use;
+};
 
 /*******************************************************************
  * \brief Interface::_BufferCallback
@@ -390,15 +458,11 @@ public:
 
     FrameDim anImageDim;
     getFrameDim(anImageDim);
-  
-    void *aDataBuffer;
-    if(posix_memalign(&aDataBuffer,16,anImageDim.getMemSize()))
-      THROW_HW_ERROR(Error) << "Can't allocate memory";
+    long memSize = anImageDim.getMemSize();
 
     int fd = open(full_path,O_RDONLY);
     if(fd < 0)
       {
-	free(aDataBuffer);
 	if(from == HwFileEventCallbackHelper::OnDemand)
 	  THROW_HW_ERROR(Error) << "Image is no more available";
 	else
@@ -407,20 +471,23 @@ public:
 	    THROW_HW_ERROR(Error) << "Can't open file:" << DEB_VAR1(full_path);
 	  }
       }
-  
-    lseek(fd,DECTRIS_EDF_OFFSET,SEEK_SET);
-    ssize_t aReadSize = read(fd,aDataBuffer,anImageDim.getMemSize());
-    if(aReadSize != anImageDim.getMemSize())
+    void* mmap_mem_base = mmap(NULL,DECTRIS_EDF_OFFSET + memSize,
+			  PROT_READ,MAP_SHARED,fd,0);
+
+    close(fd);
+
+    if(mmap_mem_base == MAP_FAILED)
       {
-	close(fd),free(aDataBuffer);
 	m_interface.m_cam.errorStopAcquisition();
 	THROW_HW_ERROR(Error) << "Problem to read image:" << DEB_VAR1(full_path);
       }
-    close(fd);
     
+    void* aDataBuffer = (char*)mmap_mem_base + DECTRIS_EDF_OFFSET;
     frame_info = HwFrameInfoType(image_number,aDataBuffer,&anImageDim,
 				 Timestamp(),0,
-				 HwFrameInfoType::Shared);
+				 HwFrameInfoType::Managed);
+    m_mmap_manager.register_new_mmap(mmap_mem_base,
+				     aDataBuffer,DECTRIS_EDF_OFFSET + memSize);
     bool aReturnFlag = true;
     if(m_interface.m_buffer.getNbOfFramePending() > 32)
       {
@@ -444,8 +511,13 @@ public:
     frame_dim.setSize(current_size);
     frame_dim.setImageType(current_image_type);
   }
+  virtual HwBufferCtrlObj::Callback* getBufferCallback()
+  {
+    return &m_mmap_manager;
+  }
 private:
   Interface&	m_interface;
+  _MmapManager	m_mmap_manager;
 };
 
 /*******************************************************************
@@ -474,6 +546,11 @@ Interface::Interface(Camera& cam,const DetInfoCtrlObj::Info* info)
 
     HwSavingCtrlObj *saving = &m_saving;
     m_cap_list.push_back(HwCap(saving));
+
+    m_buffer.getDirectoryEvent().watch_moved_to();
+
+    //Activate new pilatus3 threshold method
+    if(m_det_info.isPilatus3()) cam._pilatus3model();
 }
 
 //-----------------------------------------------------
@@ -620,7 +697,13 @@ void Interface::setThresholdGain(int threshold, Camera::Gain gain)
 {
     m_cam.setThresholdGain(threshold, gain);
 }
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setThreshold(int threshold,int energy)
+{
+  m_cam.setThreshold(threshold,energy);
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------

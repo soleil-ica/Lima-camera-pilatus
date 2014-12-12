@@ -64,6 +64,7 @@ namespace Pilatus
     Pilatus::Camera::Gain gain() const;
     void setThresholdGain(int threshold,
 			  Pilatus::Camera::Gain gain = DEFAULT_GAIN);
+    void setThreshold(int threshold,int energy = -1);
 
     double exposure() const;
     void setExposure(double expo);
@@ -95,5 +96,6 @@ namespace Pilatus
     void sendAnyCommand(const std::string& message);    
 
     int nbAcquiredImages() const;
+    void version(int& major /Out/,int& minor /Out/,int& patch /Out/) const;
    };
 };

@@ -74,9 +74,11 @@ public:
 	}
 	;
 
-	double getMinLatTime() const {return 3e-3;}
+	double getMinLatTime() const;
+	bool isPilatus3() const {return m_is_pilatus3;}
 private:
 	Info	m_info;
+        bool    m_is_pilatus3;
 };
 /*******************************************************************
  * \class SyncCtrlObj
@@ -140,7 +142,8 @@ public:
 
 	void setEnergy(double energy);
 	double getEnergy(void);
-	void setThresholdGain(int threshold, Camera::Gain gain);
+	void setThresholdGain(int threshold, Camera::Gain gain); // backward compatibility
+	void setThreshold(int threshold,int energy = -1);
 	int getThreshold(void);
 	Camera::Gain getGain(void);
 	void sendAnyCommand(const std::string& str);

@@ -66,7 +66,7 @@ namespace Pilatus
 #include <PilatusInterface.h>
 %End
   public:
-    Interface(Pilatus::Camera& cam,
+    Interface(Pilatus::Camera& cam /KeepReference/,
 	      const Pilatus::DetInfoCtrlObj::Info* = NULL);
     virtual ~Interface();
 
@@ -83,6 +83,7 @@ namespace Pilatus
     void setEnergy(double energy);
     double getEnergy();
     void setThresholdGain(int threshold, Pilatus::Camera::Gain gain);
+    void setThreshold(int threshold,int energy = -1);
     int getThreshold();
     Pilatus::Camera::Gain getGain();
     void sendAnyCommand(const std::string& str);

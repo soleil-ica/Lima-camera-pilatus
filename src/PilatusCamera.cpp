@@ -27,6 +27,7 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <iomanip>
 
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -107,7 +108,12 @@ Camera::Camera(const char *host,int port)
                     m_stop(false),
                     m_thread_id(0),
                     m_state(DISCONNECTED),
-                    m_nb_acquired_images(0)
+                    m_nb_acquired_images(0),
+		    m_has_cmd_setenergy(true),
+		    m_pilatus3_threshold_mode(false),
+		    m_major_version(-1),
+		    m_minor_version(-1),
+		    m_patch_version(-1)
 {
     DEB_CONSTRUCTOR();
     m_server_ip         = host;
@@ -274,6 +280,7 @@ void Camera::_resync()
       send("setthreshold");
     send("exptime");
     send("expperiod");
+    send("nimages 1");
     std::stringstream cmd;
     cmd<<"imgpath "<<m_imgpath;
     send(cmd.str());
@@ -281,6 +288,7 @@ void Camera::_resync()
     send("nexpframe");
     send("setackint 0");
     send("dbglvl 1");
+    send("version");
 }
 
 //-----------------------------------------------------
@@ -291,7 +299,25 @@ void Camera::_reinit()
     _resync();
     send("nimages");
 }
-
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::_pilatus3model()
+{
+  m_pilatus3_threshold_mode = true;
+}
+//-----------------------------------------------------
+// This method will reset threshold if it's a pilatus3 
+// and bugged version
+//-----------------------------------------------------
+void Camera::_work_around_threshold_bug()
+{
+  if(m_pilatus3_threshold_mode &&
+     m_major_version <= 7 &&
+     m_minor_version <= 4 &&
+     m_patch_version <= 3)
+    send("setthreshold 0");
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -504,6 +530,7 @@ void Camera::_run()
                         }
                         else  // ERROR MESSAGE
                         {
+			  m_error_message = msg.substr(7);
                             if(m_state == Camera::SETTING_THRESHOLD)
 			      DEB_TRACE() << "-- Threshold process failed";
                             if(m_state == Camera::SETTING_ENERGY)
@@ -511,10 +538,8 @@ void Camera::_run()
                             else if(m_state == Camera::RUNNING)
 			      DEB_TRACE() << "-- Exposure process failed";
                             else
-                            {
-			        DEB_TRACE() << "-- ERROR";
-                                DEB_TRACE() << msg.substr(2);
-                            }
+			      DEB_TRACE() << "-- ERROR " << m_error_message;
+
 			    m_state = Camera::ERROR;
 			}
                         m_cond.broadcast();
@@ -551,6 +576,11 @@ void Camera::_run()
 			      m_has_cmd_setenergy = false;
 			      _resync();
 			    }
+			  else if(msg.find("Unrecognized command: version") != 
+				  std::string::npos)
+			    {
+			      DEB_TRACE() << "Can't retrieved camserver version";
+			    }
 			  else
 			    {
                             DEB_TRACE() << "-- ERROR";
@@ -577,6 +607,22 @@ void Camera::_run()
                             DEB_TRACE() << m_error_message;
                         }                        
                     }
+		    else if(msg.substr(0,2) == "24")
+		      {
+			if(msg.substr(3,2) == "OK" &&
+			   msg.substr(6,12) == "Code release")
+			  {
+			    DEB_TRACE() << msg.substr(6);
+			    std::vector<std::string> version_vector;
+			    _split(msg.substr(20),".",version_vector);
+			    if(version_vector.size() == 3)
+			      {
+				m_major_version = atoi(version_vector[0].c_str());
+				m_minor_version = atoi(version_vector[1].c_str());
+				m_patch_version = atoi(version_vector[2].c_str());
+			      }
+			  }
+		      }
                 }
             }
         }
@@ -665,16 +711,19 @@ void Camera::hardReset()
 }
 
 //-----------------------------------------------------
-//
+// Return energy in keV
 //-----------------------------------------------------
 double Camera::energy() const
 {
     AutoMutex aLock(m_cond.mutex());
-    return m_energy;
+    if(m_has_cmd_setenergy)
+       return (double)m_energy/1000;
+    else
+       return (double)m_threshold/600;
 }
 
 //-----------------------------------------------------
-//
+// Set energy in keV
 //-----------------------------------------------------
 void Camera::setEnergy(double val)
 {
@@ -685,18 +734,32 @@ void Camera::setEnergy(double val)
 			 "Could not set energy, server is not idle");
     if(m_has_cmd_setenergy)
       {
+	_work_around_threshold_bug();
+
 	m_state = Camera::SETTING_ENERGY;
 	std::stringstream msg;
-	msg << "setenergy " << val;
+	msg << "setenergy " << val*1000;
 	send(msg.str());
       }
     else
-      THROW_HW_ERROR(Error) << "This version of camserver don't have this feature";
+      {
+        Camera::Gain gain;
+        int threshold;
+        // In old version of camserver,  setenergy is not implemented, emulate it instead
+        // with threshold and gain, according to rules of ranges given by Dectris support
+        threshold = (int)(val * 600); //60% of the energy in eV
+        if (val > 12) gain = LOW;
+        else if (val > 8 && val <= 12) gain = MID;
+        else if (val >= 6 && val <= 8) gain = HIGH;
+        else gain = UHIGH;
+        aLock.unlock();
+        setThresholdGain(threshold, gain);
+      }
 
 }
 
 //-----------------------------------------------------
-//
+// Return the threshold in eV
 //-----------------------------------------------------
 int Camera::threshold() const
 {
@@ -705,7 +768,7 @@ int Camera::threshold() const
 }
 
 //-----------------------------------------------------
-//
+// Return the gain
 //-----------------------------------------------------
 Camera::Gain Camera::gain() const
 {
@@ -714,7 +777,7 @@ Camera::Gain Camera::gain() const
 }
 
 //-----------------------------------------------------
-//
+// Set Threshold (ev) and gain pair
 //-----------------------------------------------------
 void Camera::setThresholdGain(int value,Camera::Gain gain)
 {
@@ -745,7 +808,36 @@ void Camera::setThresholdGain(int value,Camera::Gain gain)
     if (m_gap_fill)
         send("gapfill -1");
 }
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setThreshold(int threshold,int energy)
+{
+  DEB_MEMBER_FUNCT();
 
+  if(!m_pilatus3_threshold_mode)
+    THROW_HW_ERROR(NotSupported) << "Could not use pilatus threshold flavor";
+
+  AutoMutex aLock(m_cond.mutex());
+  RECONNECT_WAIT_UNTIL(Camera::STANDBY,
+		       "Could not set threshold,server is not idle");
+
+  _work_around_threshold_bug();
+
+  m_state = Camera::SETTING_THRESHOLD;
+  if(energy < 0)
+    {
+      char buffer[128];
+      snprintf(buffer,sizeof(buffer),"setthreshold %d",threshold);
+      send(buffer);
+    }
+  else
+    {
+      char buffer[128];
+      snprintf(buffer,sizeof(buffer),"setthreshold energy %d %d",energy,threshold);
+      send(buffer);
+    }
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -795,8 +887,17 @@ void Camera::setExposurePeriod(double val)
 			 "Could not set exposure period, server not idle");
     m_state = Camera::SETTING_EXPOSURE_PERIOD;
     std::stringstream msg;
-    msg << "expperiod " << val;
+    msg << std::setprecision(9) << "expperiod " << val;
     send(msg.str());
+    // Exposure period can failed if it's two fast
+    while(m_state == Camera::SETTING_EXPOSURE_PERIOD)
+      m_cond.wait(TIME_OUT);
+    if(m_state == Camera::ERROR)
+      {
+	m_state = Camera::STANDBY;
+	THROW_HW_ERROR(Error) << "Could not set exposure period to:"
+			      << DEB_VAR2(val,m_error_message);
+      }
 }
 
 //-----------------------------------------------------
@@ -907,17 +1008,6 @@ void Camera::startAcquisition(int image_number)
     if(m_state == Camera::RUNNING)
         THROW_HW_ERROR(Error) << "Could not start acquisition, you have to wait the end of the previous one";
 
-    if( m_trigger_mode != Camera::EXTERNAL_GATE)
-    {
-        while(m_exposure_period <= (m_exposure + 0.002999))
-        {
-	  std::stringstream msg;
-	  msg << "expperiod " << (m_exposure + 0.003);
-	  send(msg.str());
-	  m_cond.wait(TIME_OUT);
-        }
-    }
-
     char filename[256];
     snprintf(filename,sizeof(filename),m_file_pattern.c_str(),image_number);
 
@@ -940,7 +1030,11 @@ void Camera::startAcquisition(int image_number)
     send(msg.str());
     if(m_trigger_mode != Camera::INTERNAL_SINGLE || 
        m_trigger_mode != Camera::INTERNAL_MULTI)
+      {
         m_cond.wait(TIME_OUT);
+	if(m_pilatus3_threshold_mode)
+	  m_cond.wait(1.);	// Ugly fix for external synchro
+      }
 
 }
 
@@ -1035,6 +1129,15 @@ int Camera::nbAcquiredImages() const
 
     AutoMutex aLock(m_cond.mutex());
     return m_nb_acquired_images;
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::version(int& major,int& minor,int& patch) const
+{
+  major = m_major_version;
+  minor = m_minor_version;
+  patch = m_patch_version;
 }
 
 //-----------------------------------------------------
