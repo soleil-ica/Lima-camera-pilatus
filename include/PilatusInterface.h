@@ -12,9 +12,15 @@ using namespace lima;
 using namespace lima::Pilatus;
 using namespace std;
 
-#define LATENCY_DEFAULT_VALUE          0.003
+#define LATENCY_DEFAULT_VALUE           0.003
+
+#define PILATUS_MODEL                   "PILATUS_6M"
+
 #define PILATUS_6M_WIDTH                2463
 #define PILATUS_6M_HEIGHT               2527
+
+#define PILATUS_3M_WIDTH                981
+#define PILATUS_3M_HEIGHT               1043
 
 namespace lima
 {
@@ -59,6 +65,9 @@ public:
 
 private:
 	Camera& m_cam;
+    Size    m_det_size;
+    std::string m_det_model;
+    int          m_bpp;
 };
 
 /*******************************************************************
@@ -106,7 +115,8 @@ public:
 	}
 	;
 	int getLastAcquiredFrame();
-
+    bool isTimeoutSignaled(void);
+    void setTimeout(double TO);
 	virtual void registerFrameCallback(HwFrameCallback& frame_cb);
 	virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
 private:
@@ -180,23 +190,17 @@ public:
 	virtual int getNbHwAcquiredFrames();
 
 	//Specific pilatus funtions
-	void setLatency(double latency);
-	double getLatency(void);
-
-	void setImagePath(const std::string& path);
-	const std::string& getImagePath(void);
-
-	void setFileName(const std::string& name);
-	const std::string& getFileName(void);
 
 	void setEnergy(double energy);
 	double getEnergy(void);
-	void setMxSettings(const std::string& str);
 	void setThresholdGain(int threshold, Camera::Gain gain);
 	int getThreshold(void);
 	Camera::Gain getGain(void);
 	void sendAnyCommand(const std::string& str);
-
+    Camera& getCamera() { return m_cam; }    
+    const Camera& getCamera() const { return m_cam; }    
+    void setTimeout(double TO);
+    
 private:
 	Camera& m_cam;
 	CapList m_cap_list;

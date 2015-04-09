@@ -1,6 +1,7 @@
 #include <yat/threading/Mutex.h>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <math.h>
 #include "Debug.h"
@@ -8,35 +9,38 @@
 #include "PilatusReader.h"
 #include "PilatusInterface.h"
 
+
 //---------------------------
 //- Ctor
 //---------------------------
-Reader::Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl) :
-		m_cam(cam), m_buffer(buffer_ctrl)
+Reader::Reader(Camera& cam, HwDetInfoCtrlObj& detinfo, HwBufferCtrlObj& buffer_ctrl)
+: yat::Task(Config(false, //- disable timeout msg
+                   kTASK_PERIODIC_MS, //- every second (i.e. 1000 msecs)
+                   false, //- enable periodic msgs
+                   kTASK_PERIODIC_TIMEOUT_MS, //- every second (i.e. 1000 msecs)
+                   false, //- don't lock the internal mutex while handling a msg (recommended setting)
+                   kDEFAULT_LO_WATER_MARK, //- msgQ low watermark value
+                   kDEFAULT_HI_WATER_MARK, //- msgQ high watermark value
+                   false, //- do not throw exception on post msg timeout (msqQ saturated)
+                   0)), //- user data (same for all msgs) 
+m_cam(cam),
+m_det_info(detinfo),
+m_buffer(buffer_ctrl)
 {
-	DEB_CONSTRUCTOR();
-	try
-	{
-		m_stop_done = true;
-		m_image_size = Size(PILATUS_6M_WIDTH, PILATUS_6M_HEIGHT);
-		m_dw = 0;
-		m_use_dw = true;
-		m_image_number = -1;
-		m_time_out_watcher = 0;
-		m_is_running = false;
-		m_use_dw = m_cam.isDirectoryWatcherEnabled();
-		enable_timeout_msg(false);
-		enable_periodic_msg(false);
-		set_periodic_msg_period(kTASK_PERIODIC_TIMEOUT_MS);
-		m_image = new uint32_t[m_image_size.getWidth() * m_image_size.getHeight()];
-		memset((uint32_t*) m_image, 0, m_image_size.getWidth() * m_image_size.getHeight() * 4);
-	}
-	catch (yat::Exception& ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
+    DEB_CONSTRUCTOR();
+    try
+    {
+        m_det_info.getMaxImageSize(m_image_size);
+        m_image_number = -1;
+        m_timeout_value = kDEFAULT_READER_TIMEOUT_MSEC / 1000.;
+        m_use_dw = m_cam.isDirectoryWatcherEnabled();
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
 }
 
 //---------------------------
@@ -44,27 +48,17 @@ Reader::Reader(Camera& cam, HwBufferCtrlObj& buffer_ctrl) :
 //---------------------------
 Reader::~Reader()
 {
-	DEB_DESTRUCTOR();
-	try
-	{
-		if (m_dw != 0)
-		{
-			delete m_dw;
-			m_dw = 0;
-		}
-
-		if (m_image != 0)
-		{
-			delete m_image;
-			m_image = 0;
-		}
-	}
-	catch (yat::Exception& ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
+    DEB_DESTRUCTOR();
+    try
+    {
+        //NOP !
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
 }
 
 //---------------------------
@@ -72,53 +66,52 @@ Reader::~Reader()
 //---------------------------
 void Reader::start()
 {
-	DEB_MEMBER_FUNCT();
-	try
-	{
-		if (m_dw != 0)
-		{
-			delete m_dw;
-			m_dw = 0;
-		}
-
-		if(m_use_dw)
-			m_dw = new yat::DirectoryWatcher(m_cam.imgpath());
-
-		this->post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
-	}
-	catch (Exception &e)
-	{
-		// Error handling
-		DEB_ERROR() << e.getErrMsg();
-		throw LIMA_HW_EXC(Error, e.getErrMsg());
-	}
-	catch (yat::Exception &ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        double eTime;
+        eTime = m_cam.exposure();
+        yat::MutexLock scoped_lock(lock_);
+        DEB_TRACE() << "eTime = " << eTime;
+        DEB_TRACE() << "set timeout value = " << (eTime + m_timeout_value)*1000. << " ms";
+        m_timeout.set_value((eTime + m_timeout_value)*1000.); //*1000. because m_timeout is in ms
+        post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
+    }
+    catch(Exception &e)
+    {
+        // Error handling
+        DEB_ERROR() << e.getErrMsg();
+        throw LIMA_HW_EXC(Error, e.getErrMsg());
+    }
+    catch(yat::Exception &ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
 }
 
 //---------------------------
 //- Reader::stop()
 //---------------------------
-void Reader::stop(bool immediatley)
+void Reader::stop()
 {
-	DEB_MEMBER_FUNCT();
-	try
-	{
-		m_stop_immediatley = immediatley;
-		yat::Message* msg = new yat::Message(PILATUS_STOP_MSG);
-		msg->attach_data((bool) immediatley);
-		this->post(msg, kPOST_MSG_TMO);
-	}
-	catch (yat::Exception& ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        {
+            yat::MutexLock scoped_lock(lock_);
+            m_stop_request = true;
+        }
+
+        post(new yat::Message(PILATUS_STOP_MSG), kPOST_MSG_TMO);
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
 }
 
 //---------------------------
@@ -126,17 +119,17 @@ void Reader::stop(bool immediatley)
 //---------------------------
 void Reader::reset()
 {
-	DEB_MEMBER_FUNCT();
-	try
-	{
-		this->post(new yat::Message(PILATUS_RESET_MSG), kPOST_MSG_TMO);
-	}
-	catch (yat::Exception& ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        post(new yat::Message(PILATUS_RESET_MSG), kPOST_MSG_TMO);
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
 }
 
 //---------------------------
@@ -144,9 +137,9 @@ void Reader::reset()
 //---------------------------
 int Reader::getLastAcquiredFrame(void)
 {
-	DEB_MEMBER_FUNCT();
-	yat::MutexLock scoped_lock(lock_);
-	return m_image_number;
+    DEB_MEMBER_FUNCT();
+    yat::MutexLock scoped_lock(lock_);
+    return m_image_number;
 }
 
 //---------------------------
@@ -154,9 +147,20 @@ int Reader::getLastAcquiredFrame(void)
 //---------------------------
 bool Reader::isTimeoutSignaled()
 {
-	DEB_MEMBER_FUNCT();
-	yat::MutexLock scoped_lock(lock_);
-	return (m_elapsed_ms_from_stop>=TIME_OUT_WATCHER)?true:false;
+    DEB_MEMBER_FUNCT();
+    yat::MutexLock scoped_lock(lock_);
+    return m_timeout.expired();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Reader::setTimeout(double timeout_val)
+{
+    DEB_MEMBER_FUNCT();
+    DEB_PARAM() << DEB_VAR1(timeout_val);
+    yat::MutexLock scoped_lock(lock_);
+    m_timeout_value = timeout_val;
 }
 
 //---------------------------
@@ -164,210 +168,297 @@ bool Reader::isTimeoutSignaled()
 //---------------------------
 bool Reader::isRunning(void)
 {
-	DEB_MEMBER_FUNCT();
-	yat::MutexLock scoped_lock(lock_);
-	return m_is_running;
+    DEB_MEMBER_FUNCT();
+    yat::MutexLock scoped_lock(m_lock);
+    return periodic_msg_enabled();
 }
+
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Reader::handle_message(yat::Message& msg) throw (yat::Exception)
+void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
 {
-	DEB_MEMBER_FUNCT();
-	try
-	{
-		switch (msg.type())
-		{
-			//-----------------------------------------------------
-			case yat::TASK_INIT:
-			{
-				DEB_TRACE() << "Reader::->TASK_INIT";
-			}
-			break;
-			//-----------------------------------------------------
-			case yat::TASK_EXIT:
-			{
-				DEB_TRACE() << "Reader::->TASK_EXIT";
-			}
-			break;
-			//-----------------------------------------------------
-			case yat::TASK_TIMEOUT:
-			{
-				DEB_TRACE() << "Reader::->TASK_TIMEOUT";
-			}
-			break;
-			//-----------------------------------------------------
-			case yat::TASK_PERIODIC:
-			{
-				////DEB_TRACE() << "Reader::->TASK_PERIODIC";
-				if (m_stop_done)
-				{
-					if (m_elapsed_ms_from_stop >= m_time_out_watcher) // TO
-					{
-						enable_periodic_msg(false);
-						if (m_dw != 0)
-						{
-							delete m_dw;
-							m_dw = 0;
-						}
-						yat::MutexLock scoped_lock(lock_);
-						{
-							m_is_running = false;
-						}
-						return;
-					}
-					m_elapsed_ms_from_stop+=kTASK_PERIODIC_TIMEOUT_MS;
-					DEB_TRACE() << "Elapsed time since stop() = " << m_elapsed_ms_from_stop << " ms";
-				}
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        switch(msg.type())
+        {
+                //-----------------------------------------------------
+            case yat::TASK_INIT:
+            {
+                DEB_TRACE() << "Reader::->TASK_INIT";
+                //- set unit in seconds
+                m_timeout.set_unit(yat::Timeout::TMO_UNIT_MSEC);
+                //- set default timeout value
+                m_timeout.set_value(kDEFAULT_READER_TIMEOUT_MSEC);
+            }
+                break;
+                //-----------------------------------------------------
+            case yat::TASK_EXIT:
+            {
+                DEB_TRACE() << "Reader::->TASK_EXIT";
+            }
+                break;
+                //-----------------------------------------------------
+            case yat::TASK_TIMEOUT:
+            {
+                DEB_TRACE() << "Reader::->TASK_TIMEOUT";
+            }
+                break;
+                //-----------------------------------------------------
+            case yat::TASK_PERIODIC:
+            {
+                DEB_TRACE() << " ";
+                DEB_TRACE() << "-----------------------";
+                DEB_TRACE() << "Reader::->TASK_PERIODIC";
 
-				if(m_use_dw)
-				{
-					if (m_dw)
-					{
-						//get new created or changed files in the imagepath directory
-						yat::DirectoryWatcher::FileNamePtrVector vecNewFiles, vecChangedFiles, vecNewAndChangedFiles;
-						m_dw->get_changes(&vecNewFiles, &vecChangedFiles);
-						vecNewAndChangedFiles.resize(vecNewFiles.size()+vecChangedFiles.size());
+                if(m_use_dw)
+                {
+                    DEB_TRACE() << "Check if stop is requested";
+                    //- check if stop is requested
+                    {
+                        yat::MutexLock scoped_lock(lock_);
+                        if(m_stop_request)
+                            break;
+                    }
 
-						//concatenation
-						copy(vecNewFiles.begin(), vecNewFiles.end(), vecNewAndChangedFiles.begin());
-						copy(vecChangedFiles.begin(), vecChangedFiles.end(), vecNewAndChangedFiles.begin()+vecNewFiles.size());
+                    DEB_TRACE() << "Check if timeout expired";
+                    //- check if timeout expired                    
+                    if (m_timeout.expired())
+                    {
+                        DEB_TRACE() << "-- Failed to load image : timeout expired !";
+                        //- disable periodic msg
+                        enable_periodic_msg(false);
+                        return;
+                    }
 
-						//initialisze image_number when first image arrived
-						if(vecNewAndChangedFiles.size()>0 && m_image_number == -1)
-							m_image_number = 0;
+                    //- get full image name as full/path/pattern_%5d.tif
+                    std::string full_pattern = m_cam.imgpath() + "/" + m_cam.fileName();
+                    std::string full_file_name(255, ' ');
+                    sprintf(const_cast<char*>(full_file_name.data()), full_pattern.c_str(), m_image_number);
 
-						//foreach new or changed file in the watched directory, frame is incremented and an image is copied to the frame ptr
-						for (int i = 0; i < vecNewAndChangedFiles.size(); i++)
-						{
-							if (vecNewAndChangedFiles.at(i)->file_exist())
-							{
-								DEB_TRACE() << "file : " << vecNewAndChangedFiles.at(i)->name_ext();
-								addNewFrame();
-							}
-						}
-					}
-				}
-				else // use response of camserver at end of exposure to increment nb_frame once for all
-				{
-					if(m_cam.nbAcquiredImages()!=0 && !m_stop_immediatley )
-					{
-						DEB_TRACE() << "Exposure SUCCEEDED received from CamServer !";//all images (nbImagesInSequence()) are acquired !
+                    DEB_TRACE() << "Force refreshing of nfs file system using ls command ";
+                    // Force nfs file system to refresh !!
+                    std::stringstream lsCommand;
+                    lsCommand << "ls " << m_cam.imgpath() << " 2>&1 > /dev/null";
+                    system(lsCommand.str().c_str());
 
-						for(int i =0; i<m_cam.nbImagesInSequence();i++)
-						{
-							if(m_stop_immediatley)
-								break;
-							addNewFrame();
-						}
-					}
-				}
-			}
-			break;
-			//-----------------------------------------------------
-			case PILATUS_START_MSG:
-			{
-				DEB_TRACE() << "Reader::->PILATUS_START_MSG";
-				yat::MutexLock scoped_lock(lock_);
-				{
-					m_stop_immediatley = false;
-					m_is_running = true;
-					//initialisze image_number when first image arrived					
-					m_image_number = 0;
-					m_elapsed_ms_from_stop = 0;
-					m_stop_done = false;
-				}
-				enable_periodic_msg(true);
-			}
-			break;
-			//-----------------------------------------------------
-			case PILATUS_STOP_MSG:
-			{
-				DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
-				////m_stop_immediatley = msg.get_data<bool>();
-				if (m_stop_immediatley)
-					m_time_out_watcher = 0;
-				else
-					m_time_out_watcher = TIME_OUT_WATCHER;
-				if (!m_stop_done)//reset the counter, only at first call of stop()
-				{
-					m_elapsed_ms_from_stop = 0;
-					m_stop_done = true;
-				}
-			}
-			break;
-			//-----------------------------------------------------
-			case PILATUS_RESET_MSG:
-			{
-				DEB_TRACE() << "Reader::->PILATUS_RESET_MSG";
-			}
-			break;
-			//-----------------------------------------------------
-		}
-	}
-	catch (yat::Exception& ex)
-	{
-		DEB_ERROR() << "Error : " << ex.errors[0].desc;
-		throw;
-	}
-
+                    DEB_TRACE() << "Check if file : " << full_file_name << " exist ?";
+                    //- check if file exist
+                    std::ifstream ifFile(full_file_name.c_str(), ios_base::in);
+                    if (ifFile)
+                    {
+                        //foreach file generated by CamServer & found by Reader, a new frame is added
+                        DEB_TRACE() << "-- Found File [" << full_file_name << "]";
+                        DEB_TRACE() << "-- Add New Frame ...";
+                        addNewFrame(full_file_name);
+                    }
+                }
+                else // use response of camserver at end of exposure to increment nb_frame once for all
+                {
+                    m_timeout.disable();
+                    DEB_TRACE() << "Check response of CamServer at the end of exposure";
+                    if(m_cam.nbAcquiredImages() != 0 && !m_stop_request)
+                    {
+                        DEB_TRACE() << "-- Exposure succeded received from CamServer !"; //all images (nbImagesInSequence()) are acquired !
+                        DEB_TRACE() << "-- Process all SIMULATED frames :";
+                        for(int i = 0; i < m_cam.nbImagesInSequence(); i++)
+                        {
+                            {
+                                yat::MutexLock scoped_lock(lock_);
+                                if(m_stop_request)
+                                    break;
+                            }
+                            DEB_TRACE() << "-- Add New Frame ...";
+                            addNewFrame();
+                        }
+                    }
+                }
+            }
+                break;
+                //-----------------------------------------------------
+            case PILATUS_START_MSG:
+            {
+                DEB_TRACE() << "Reader::->PILATUS_START_MSG";
+                yat::MutexLock scoped_lock(lock_);
+                {
+                    m_stop_request = false;
+                    //initialisze image_number when first image arrived					
+                    m_image_number = 0;
+                }
+                //- re-arm timeout
+                m_timeout.restart();
+                enable_periodic_msg(true);
+            }
+                break;
+                //-----------------------------------------------------
+            case PILATUS_STOP_MSG:
+            {
+                DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
+                enable_periodic_msg(false);
+                m_timeout.disable();
+            }
+                break;
+                //-----------------------------------------------------
+            case PILATUS_RESET_MSG:
+            {
+                DEB_TRACE() << "Reader::->PILATUS_RESET_MSG";
+                enable_periodic_msg(false);
+                m_timeout.disable();
+            }
+                break;
+                //-----------------------------------------------------
+        }
+    }
+    catch(yat::Exception& ex)
+    {
+        DEB_ERROR() << "Error : " << ex.errors[0].desc;
+        throw;
+    }
 }
 
 //---------------------------
 //- Reader::addNewFrame()
 //---------------------------
-void Reader::addNewFrame(void)
+void Reader::addNewFrame(const std::string & file_name)
 {
-	DEB_MEMBER_FUNCT();
-	try
-	{
-		StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
-		bool continueAcq = false;
-		int buffer_nb, concat_frame_nb;
-		DEB_TRACE() << "file : " << "SIMULATED("<<m_image_number<<")";
-		DEB_TRACE() << "image#" << m_image_number << " acquired !";
-		buffer_mgr.setStartTimestamp(Timestamp::now());
-		buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
+        bool continueAcq = false;
+        int buffer_nb, concat_frame_nb;
+        DEB_TRACE() << "-- #image n°: " << m_image_number << " acquired !";
+        buffer_mgr.setStartTimestamp(Timestamp::now());
+        buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
 
-		//simulate an image !
-		DEB_TRACE() << "-- prepare image buffer";
-		void *ptr = buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
+        //simulate an image !
+        DEB_TRACE() << "-- prepare image buffer";
+        void *ptr = buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
 
-		DEB_TRACE() << "-- copy image in buffer";
-		////memcpy((uint32_t *) ptr, (uint32_t *) (m_image), m_image_size.getWidth() * m_image_size.getHeight() * 4); //*4 because 32bits
-		yat::ThreadingUtilities::sleep(0, 5000000); //5 ms
+        if(m_use_dw)
+        {
+            //read image file using diffractionImage library
+            DEB_TRACE() << "-- read Tiff image created by the CamServer";
+            ReadTiff(file_name, (int32_t*)ptr);
+        }
+        else
+        {
+            yat::ThreadingUtilities::sleep(0, 5000000); //5 ms
+        }
 
-		DEB_TRACE() << "-- newFrameReady";
-		HwFrameInfoType frame_info;
-		frame_info.acq_frame_nb = m_image_number;
-		if(!m_stop_immediatley)
-			continueAcq = buffer_mgr.newFrameReady(frame_info);
-		else
-			continueAcq = false;
-		// if nb acquired image < requested frames
-		DEB_TRACE() << "-- continueAcq = "<<continueAcq;
-		DEB_TRACE() << "-- m_image_number = "<<m_image_number;
-		if (continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
-		{
-			yat::MutexLock scoped_lock(lock_);
-			{
-				DEB_TRACE() << "-- increase image_number";
-				m_image_number++;
-			}
-		}
-		else
-		{
-			DEB_TRACE() << "-- stop monitoring immediately";
-			stop(true);
-		}
-	}
-	catch (yat::Exception& ex)
-	{
-		// Error handling
-		DEB_ERROR() << ex.errors[0].desc;
-		throw LIMA_HW_EXC(Error, ex.errors[0].desc);
-	}
-	return;
+        DEB_TRACE() << "-- newFrameReady";
+        HwFrameInfoType frame_info;
+        frame_info.acq_frame_nb = m_image_number;
+
+        {
+            //yat::MutexLock scoped_lock(lock_);
+            if(!m_stop_request)
+                continueAcq = buffer_mgr.newFrameReady(frame_info);
+            else
+                continueAcq = false;
+        }
+
+        // if nb acquired image < requested frames
+        if(continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
+        {
+            DEB_TRACE() << "All requested frames (" << m_cam.nbImagesInSequence() << ") were not acquired";
+            yat::MutexLock scoped_lock(lock_);
+            {
+                DEB_TRACE() << "-- increase image_number";
+                m_image_number++;
+                m_timeout.restart();
+            }
+        }
+        else
+        {
+            DEB_TRACE() << "All requested frames (" << m_cam.nbImagesInSequence() << ") are acquired OR Stop is requested";
+            DEB_TRACE() << "-- stop monitoring ";
+            stop();
+        }
+        DEB_TRACE() << "-------------------------\n";
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
+    return;
+}
+
+//-----------------------------------------------------
+void Reader::DummyHandler(const char* module, const char* fmt, va_list ap)
+{
+    DEB_MEMBER_FUNCT();
+    // ignore errors and warnings (or handle them your own way)
+    DEB_TRACE() << "module :" << module;
+    DEB_TRACE() << "fmt :" << fmt ;
+}
+
+//-----------------------------------------------------
+void Reader::ReadTiff(const std::string& file_name, void *ptr)
+{
+    DEB_MEMBER_FUNCT();
+    uint32 width, height;
+    tdata_t buf;
+    uint32 row, col;
+    short config = -1, nbbitspersample = -1, compression = -1, nsamples = -1, sampleformat = -1;
+
+    TIFFSetErrorHandler(NULL);
+    DEB_TRACE() << "-- Loading image : " << file_name.c_str();
+    TIFF *input_image = TIFFOpen(file_name.c_str(), "r");
+
+    if(input_image)
+    {
+        TIFFGetField(input_image, TIFFTAG_IMAGEWIDTH, &width);
+        TIFFGetField(input_image, TIFFTAG_IMAGELENGTH, &height);
+        TIFFGetField(input_image, TIFFTAG_COMPRESSION, &compression);
+        TIFFGetField(input_image, TIFFTAG_PLANARCONFIG, &config);
+        TIFFGetField(input_image, TIFFTAG_SAMPLEFORMAT, &sampleformat);
+        TIFFGetField(input_image, TIFFTAG_SAMPLESPERPIXEL, &nsamples);
+        TIFFGetField(input_image, TIFFTAG_BITSPERSAMPLE, &nbbitspersample);
+
+        DEB_TRACE()  << "width              = " << width;
+        DEB_TRACE()  << "height             = " << height;
+        DEB_TRACE()  << "compression        = " << compression;
+        DEB_TRACE()  << "sampleformat       = " << sampleformat;
+        DEB_TRACE()  << "nbbitspersample    = " << nbbitspersample;
+
+        if(m_image_size.getWidth() != width || m_image_size.getHeight() != height)
+            throw LIMA_HW_EXC(Error, "Image size in file is different from the expected image size of this detector !");
+
+        buf = _TIFFmalloc(TIFFScanlineSize(input_image));
+
+        DEB_TRACE() << "-- copy image in buffer";
+        for(row = 0; row < height; row++)
+        {
+            TIFFReadScanline(input_image, buf, row);
+
+            if((nbbitspersample == 32) &&
+               (sampleformat == SAMPLEFORMAT_INT) &&
+               (compression == COMPRESSION_NONE) &&
+               (config == PLANARCONFIG_CONTIG))
+            {
+                memcpy(&((int32_t*)ptr)[row * width], (int32_t*)buf, width * 4);
+            }
+            else
+            {
+                //- throw exception
+                std::stringstream ssErr("");
+                ssErr << "This Image format : \n";
+                ssErr << "nbbitspersample = " << nbbitspersample << "\n";
+                ssErr << "sampleformat = " << sampleformat << "\n";
+                ssErr << "compression = " << ((compression == COMPRESSION_NONE) ? "NONE" : "COMPRESSED") << "\n";
+                ssErr << "config = " << ((config == PLANARCONFIG_CONTIG) ? "PLANAR" : "SEPARATE") << "\n";
+                ssErr << "is not managed ! " << endl;
+                throw LIMA_HW_EXC(Error, ssErr.str());
+            }
+        }
+
+        _TIFFfree(buf);
+        TIFFClose(input_image);
+    }
 }
 //-----------------------------------------------------

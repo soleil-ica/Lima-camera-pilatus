@@ -74,7 +74,7 @@ inline void _split(const std::string inString, const std::string &separator,std:
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-Camera::Camera(const char *host,int port)
+Camera::Camera(const char *host,int port, const std::string& cam_def_file_name)
                 :   m_socket(-1),
                     m_stop(false),
                     m_thread_id(0),
@@ -85,13 +85,17 @@ Camera::Camera(const char *host,int port)
     DEB_CONSTRUCTOR();
     m_server_ip         = host;
     m_server_port       = port;
+    m_cam_def_file_name = cam_def_file_name;
     _initVariable();
 
+    DEB_TRACE() << "Open pipes.";
     if(pipe(m_pipes))
         THROW_HW_ERROR(Error) << "Can't open pipe";
 
+    DEB_TRACE() << "Create Thread in ordre to decode messages from CamServer";
     pthread_create(&m_thread_id,NULL,_runFunc,this);
 
+    DEB_TRACE() << "Connect to CamServer";
     connect(host,port);
 }
 
@@ -108,6 +112,7 @@ Camera::~Camera()
     {
       write(m_pipes[1],"|",1);
       ///close(m_socket);
+      DEB_TRACE() << "Shutdwon socket";
       shutdown(m_socket,2);
       m_socket = -1;
     }
@@ -188,11 +193,13 @@ void Camera::connect(const char *host,int port)
         AutoMutex aLock(m_cond.mutex());
         if(m_socket >= 0)
         {
+            DEB_TRACE() << "Close socket";
             close(m_socket);
             m_socket = -1;
         }
         else
         {
+            DEB_TRACE() << "Create socket";
             m_socket = socket(PF_INET, SOCK_STREAM,IPPROTO_TCP);
             if(m_socket >= 0)
             {
@@ -202,12 +209,14 @@ void Camera::connect(const char *host,int port)
                 add.sin_family = AF_INET;
                 add.sin_port = htons((unsigned short)port);
                 add.sin_addr.s_addr = inet_addr(yat::Address(host,0).get_ip_address().c_str());
+                DEB_TRACE() << "Connect socket";
                 if(::connect(m_socket,reinterpret_cast<sockaddr*>(&add),sizeof(add)))
                 {
                     close(m_socket);
                     m_socket = -1;
                     THROW_HW_ERROR(Error) << "Can't open connection";
                 }
+                DEB_TRACE() << "Connection is established";
                 write(m_pipes[1],"|",1);
                 m_state = Camera::STANDBY;
                 _resync();
@@ -223,7 +232,7 @@ void Camera::connect(const char *host,int port)
 //-----------------------------------------------------
 void Camera::_resync()
 {
-    send("SetThreshold");
+    send("setthreshold");
     send("exptime");
     send("expperiod");
     std::stringstream cmd;
@@ -376,6 +385,20 @@ void Camera::_run()
                         {                            
                             std::string real_message = msg.substr(6);
 
+                            if(real_message.find("Energy") != std::string::npos)
+                            {
+                                size_t columnPos = real_message.find(":");
+                                if(columnPos == std::string::npos)
+                                {
+                                    m_threshold = m_energy = -1;
+                                    m_gain = DEFAULT_GAIN;
+                                }
+                                else
+                                {
+                                    m_energy = atoi(real_message.substr(columnPos + 1).c_str());
+                                }
+                            }                            
+                            
                             if(real_message.find("Settings:")!=std::string::npos) // Threshold and gain is already set,read them
                             {                                
                                 std::vector<std::string> threshold_vector;
@@ -603,7 +626,16 @@ const std::string& Camera::fileName(void)
     return m_file_name;
 }
     
-    
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+const std::string& Camera::camDefFileName(void)
+{
+    AutoMutex aLock(m_cond.mutex());
+    return m_cam_def_file_name;
+}
+
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -647,7 +679,7 @@ void Camera::hardReset()
 double Camera::energy() const
 {
     AutoMutex aLock(m_cond.mutex());
-    return m_threshold;
+    return m_energy;
 }
 
 //-----------------------------------------------------
@@ -665,6 +697,24 @@ void Camera::setEnergy(double val)
     send(msg.str());
 
 }
+
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setThreshold(double val)
+{
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex aLock(m_cond.mutex());
+    WAIT_UNTIL(Camera::STANDBY,"Could not set threshold, server is not idle");
+    m_state = Camera::SETTING_THRESHOLD;
+    std::stringstream msg;
+    msg << "setthr " << val;
+    send(msg.str());
+
+}
+
 
 //-----------------------------------------------------
 //
@@ -965,6 +1015,35 @@ void Camera::sendAnyCommand(const std::string& message)
     WAIT_UNTIL(Camera::STANDBY,"Could not send the Command, server is not idle");
 
     send(message);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+std::string Camera::sendAnyCommandAndGetErrorMsg(const std::string& message)
+{
+    DEB_MEMBER_FUNCT();
+
+    AutoMutex aLock(m_cond.mutex());
+    WAIT_UNTIL(Camera::STANDBY, "Could not send the Command, server is not idle");
+
+    m_state = Camera::ANYCMD;
+    send(message);
+
+    while(  m_state != Camera::STANDBY &&
+            m_state != Camera::ERROR &&
+            m_state != Camera::DISCONNECTED)
+    {
+        if(!m_cond.wait(TIME_OUT))
+            return "Timeout";
+    }
+
+    if(m_state == Camera::ERROR)
+        return m_error_message;
+    else if(m_state == Camera::DISCONNECTED)
+        return "Disconnected";
+    else
+        return "";
 }
 
 //-----------------------------------------------------

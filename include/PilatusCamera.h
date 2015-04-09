@@ -30,7 +30,7 @@ public:
         SETTING_EXPOSURE_PER_FRAME,
         KILL_ACQUISITION,
         RUNNING,
-        ANY,
+        ANYCMD,
         STANDBY
     };
 
@@ -52,7 +52,7 @@ public:
         EXTERNAL_GATE
     };
 
-    Camera(const char *host = NULL,int port = 0);
+    Camera(const char *host = NULL,int port = 0, const std::string& cam_def_file_name = "camera.def");
     ~Camera();
     
     void connect(const char* host,int port);
@@ -70,11 +70,14 @@ public:
     void setFileName(const std::string& name);
     const std::string& fileName(void);
     
+    const std::string& camDefFileName(void);    
+    
     Status status() const;
 
     double energy() const;
     void setEnergy(double val);
 
+    void setThreshold(double val);
     int threshold() const;
     Gain gain() const;
     void setThresholdGain(int threshold,Gain gain = DEFAULT_GAIN);
@@ -106,8 +109,9 @@ public:
     void send(const std::string& message);
     
     void sendAnyCommand(const std::string& message);    
-
+    std::string sendAnyCommandAndGetErrorMsg(const std::string& message);
     int nbAcquiredImages();
+    
     //s
     static const long long          DEFAULT_TMPFS_SIZE = 24LL * 1024 * 1024 * 1024;// 24Go
     static const double             TIME_OUT = 10.;
@@ -133,6 +137,7 @@ private:
     //socket/synchronization with pilatus variables
     std::string             m_server_ip;
     int                     m_server_port; 
+    std::string             m_cam_def_file_name;
     int                     m_socket;
     bool                    m_stop;
     pthread_t               m_thread_id;
