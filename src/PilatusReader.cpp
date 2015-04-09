@@ -4,8 +4,6 @@
 #include <fstream>
 #include <string>
 #include <math.h>
-#include "Debug.h"
-#include "Data.h"
 #include "PilatusReader.h"
 #include "PilatusInterface.h"
 

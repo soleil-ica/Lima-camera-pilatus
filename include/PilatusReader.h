@@ -29,15 +29,15 @@ const double kDEFAULT_READER_TIMEOUT_MSEC = 10000.;
 #include <stdlib.h>
 #include <limits>
 
-#include "Debug.h"
-#include "Data.h"
+#include "lima/Debug.h"
+#include "processlib/Data.h"
 
 #include <tiffio.h>
 
-#include "HwMaxImageSizeCallback.h"
+#include "lima/HwMaxImageSizeCallback.h"
 #include "PilatusCamera.h"
-#include "HwDetInfoCtrlObj.h"
-#include "HwBufferCtrlObj.h"
+#include "lima/HwDetInfoCtrlObj.h"
+#include "lima/HwBufferCtrlObj.h"
 
 
 

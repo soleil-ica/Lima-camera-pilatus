@@ -1,10 +1,10 @@
 #ifndef PILATUSINTERFACE_H
 #define PILATUSINTERFACE_H
 
-#include "HwInterface.h"
-#include "HwBufferMgr.h"
-#include "Debug.h"
-#include "Data.h"
+#include "lima/HwInterface.h"
+#include "lima/HwBufferMgr.h"
+#include "lima/Debug.h"
+#include "processlib/Data.h"
 #include "PilatusCamera.h"
 #include "PilatusReader.h"
 

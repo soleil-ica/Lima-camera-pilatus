@@ -1,6 +1,5 @@
 #include <algorithm>
-#include "Debug.h"
-#include "Data.h"
+
 #include <sys/types.h>
 #include <pwd.h>
 #include "PilatusReader.h"
