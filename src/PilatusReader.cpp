@@ -31,7 +31,7 @@ m_buffer(buffer_ctrl)
         m_det_info.getMaxImageSize(m_image_size);
         m_image_number = -1;
         m_timeout_value = kDEFAULT_READER_TIMEOUT_MSEC / 1000.;
-        m_use_dw = m_cam.isDirectoryWatcherEnabled();
+        m_is_reader_watcher = m_cam.isReaderWatcher();
     }
     catch(yat::Exception& ex)
     {
@@ -69,7 +69,7 @@ void Reader::start()
     {
         double eTime;
         eTime = m_cam.exposure();
-        yat::MutexLock scoped_lock(lock_);
+        yat::MutexLock scoped_lock(m_lock);
         DEB_TRACE() << "eTime = " << eTime;
         DEB_TRACE() << "set timeout value = " << (eTime + m_timeout_value)*1000. << " ms";
         m_timeout.set_value((eTime + m_timeout_value)*1000.); //*1000. because m_timeout is in ms
@@ -98,7 +98,7 @@ void Reader::stop()
     try
     {
         {
-            yat::MutexLock scoped_lock(lock_);
+            yat::MutexLock scoped_lock(m_lock);
             m_stop_request = true;
         }
 
@@ -136,7 +136,7 @@ void Reader::reset()
 int Reader::getLastAcquiredFrame(void)
 {
     DEB_MEMBER_FUNCT();
-    yat::MutexLock scoped_lock(lock_);
+    yat::MutexLock scoped_lock(m_lock);
     return m_image_number;
 }
 
@@ -146,7 +146,7 @@ int Reader::getLastAcquiredFrame(void)
 bool Reader::isTimeoutSignaled()
 {
     DEB_MEMBER_FUNCT();
-    yat::MutexLock scoped_lock(lock_);
+    yat::MutexLock scoped_lock(m_lock);
     return m_timeout.expired();
 }
 
@@ -157,7 +157,7 @@ void Reader::setTimeout(double timeout_val)
 {
     DEB_MEMBER_FUNCT();
     DEB_PARAM() << DEB_VAR1(timeout_val);
-    yat::MutexLock scoped_lock(lock_);
+    yat::MutexLock scoped_lock(m_lock);
     m_timeout_value = timeout_val;
 }
 
@@ -211,12 +211,12 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                 DEB_TRACE() << "-----------------------";
                 DEB_TRACE() << "Reader::->TASK_PERIODIC";
 
-                if(m_use_dw)
+                if(m_is_reader_watcher)
                 {
                     DEB_TRACE() << "Check if stop is requested";
                     //- check if stop is requested
                     {
-                        yat::MutexLock scoped_lock(lock_);
+                        yat::MutexLock scoped_lock(m_lock);
                         if(m_stop_request)
                             break;
                     }
@@ -264,7 +264,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                         for(int i = 0; i < m_cam.nbImagesInSequence(); i++)
                         {
                             {
-                                yat::MutexLock scoped_lock(lock_);
+                                yat::MutexLock scoped_lock(m_lock);
                                 if(m_stop_request)
                                     break;
                             }
@@ -279,7 +279,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
             case PILATUS_START_MSG:
             {
                 DEB_TRACE() << "Reader::->PILATUS_START_MSG";
-                yat::MutexLock scoped_lock(lock_);
+                yat::MutexLock scoped_lock(m_lock);
                 {
                     m_stop_request = false;
                     //initialisze image_number when first image arrived					
@@ -335,11 +335,11 @@ void Reader::addNewFrame(const std::string & file_name)
         DEB_TRACE() << "-- prepare image buffer";
         void *ptr = buffer_mgr.getBufferPtr(buffer_nb, concat_frame_nb);
 
-        if(m_use_dw)
+        if(m_is_reader_watcher)
         {
             //read image file using diffractionImage library
             DEB_TRACE() << "-- read Tiff image created by the CamServer";
-            ReadTiff(file_name, (int32_t*)ptr);
+            readTiff(file_name, (int32_t*)ptr);
         }
         else
         {
@@ -351,7 +351,7 @@ void Reader::addNewFrame(const std::string & file_name)
         frame_info.acq_frame_nb = m_image_number;
 
         {
-            //yat::MutexLock scoped_lock(lock_);
+            //yat::MutexLock scoped_lock(m_lock);
             if(!m_stop_request)
                 continueAcq = buffer_mgr.newFrameReady(frame_info);
             else
@@ -362,7 +362,7 @@ void Reader::addNewFrame(const std::string & file_name)
         if(continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
         {
             DEB_TRACE() << "All requested frames (" << m_cam.nbImagesInSequence() << ") were not acquired";
-            yat::MutexLock scoped_lock(lock_);
+            yat::MutexLock scoped_lock(m_lock);
             {
                 DEB_TRACE() << "-- increase image_number";
                 m_image_number++;
@@ -372,7 +372,7 @@ void Reader::addNewFrame(const std::string & file_name)
         else
         {
             DEB_TRACE() << "All requested frames (" << m_cam.nbImagesInSequence() << ") are acquired OR Stop is requested";
-            DEB_TRACE() << "-- stop monitoring ";
+            DEB_TRACE() << "-- stop watching ";
             stop();
         }
         DEB_TRACE() << "-------------------------\n";
@@ -387,7 +387,7 @@ void Reader::addNewFrame(const std::string & file_name)
 }
 
 //-----------------------------------------------------
-void Reader::DummyHandler(const char* module, const char* fmt, va_list ap)
+void Reader::dummyHandler(const char* module, const char* fmt, va_list ap)
 {
     DEB_MEMBER_FUNCT();
     // ignore errors and warnings (or handle them your own way)
@@ -396,7 +396,7 @@ void Reader::DummyHandler(const char* module, const char* fmt, va_list ap)
 }
 
 //-----------------------------------------------------
-void Reader::ReadTiff(const std::string& file_name, void *ptr)
+void Reader::readTiff(const std::string& file_name, void *ptr)
 {
     DEB_MEMBER_FUNCT();
     uint32 width, height;

@@ -74,11 +74,11 @@ namespace lima
             void reset();
             //return the number of acquired images
             int getLastAcquiredFrame(void);
-            //return true if Monitoring is end with a time out
+            //- return is watching is end with a time-out (time counting is begin at START & end at STOP)
             bool isTimeoutSignaled(void);
             //- define max allowed time to _read image file
             void setTimeout(double timeout_val);
-            //return teh state of monitoring files
+            //- return if Reader is running (periodic_message enabled) for a file
             bool isRunning(void);
 
             //- [yat::Task implementation]
@@ -88,11 +88,11 @@ namespace lima
         private:
             //notify Lima that a new frame is ready (it's a simulated frame filled with 0 )
             void addNewFrame(const std::string& file_name = "SIMULATED");
-            void ReadTiff(const std::string& file_name, void *ptr);
-            void DummyHandler(const char* module, const char* fmt, va_list ap);
+            void readTiff(const std::string& file_name, void *ptr);
+            void dummyHandler(const char* module, const char* fmt, va_list ap);
 
             //- Mutex
-            yat::Mutex lock_;
+            yat::Mutex m_lock;
             Camera& m_cam;
             HwDetInfoCtrlObj& m_det_info;
             HwBufferCtrlObj& m_buffer;
@@ -101,10 +101,8 @@ namespace lima
             yat::Timeout m_timeout;
             double m_timeout_value;
             bool m_stop_request;
-            //monitoring a directory located at imagePath
-            bool m_use_dw;
-            yat::DirectoryWatcher* m_dw;
-
+            //watching for a file located at imagePath
+            bool m_is_reader_watcher;
             Size m_image_size;
         };
     } // namespace Pilatus

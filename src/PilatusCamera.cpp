@@ -75,24 +75,19 @@ inline void _split(const std::string inString, const std::string &separator,std:
 //
 //-----------------------------------------------------
 Camera::Camera(const char *host,int port, const std::string& cam_def_file_name)
-                :   m_socket(-1),
-                    m_stop(false),
-                    m_thread_id(0),
-                    m_use_dw(true),
-                    m_nb_acquired_images(0),
-                    m_state(DISCONNECTED)
+                :   m_server_ip(host),
+					m_server_port(port),
+					m_cam_def_file_name(cam_def_file_name)
 {
     DEB_CONSTRUCTOR();
-    m_server_ip         = host;
-    m_server_port       = port;
-    m_cam_def_file_name = cam_def_file_name;
+
     _initVariable();
 
     DEB_TRACE() << "Open pipes.";
     if(pipe(m_pipes))
         THROW_HW_ERROR(Error) << "Can't open pipe";
 
-    DEB_TRACE() << "Create Thread in ordre to decode messages from CamServer";
+    DEB_TRACE() << "Create Thread in order to decode messages from CamServer";
     pthread_create(&m_thread_id,NULL,_runFunc,this);
 
     DEB_TRACE() << "Connect to CamServer";
@@ -112,7 +107,7 @@ Camera::~Camera()
     {
       write(m_pipes[1],"|",1);
       ///close(m_socket);
-      DEB_TRACE() << "Shutdwon socket";
+      DEB_TRACE() << "Shutdown socket";
       shutdown(m_socket,2);
       m_socket = -1;
     }
@@ -128,7 +123,7 @@ Camera::~Camera()
         DEB_TRACE()<<"[pthread_join - BEGIN]";
         if(pthread_join(m_thread_id,&returnPt)!=0)
         {
-            DEB_TRACE()<<"UNknown Error";
+            DEB_TRACE()<<"Unknown Error";
         }
         DEB_TRACE()<<"[pthread_join - END]";
     }
@@ -155,6 +150,13 @@ int Camera::serverPort() const
 //-----------------------------------------------------
 void Camera::_initVariable()
 {
+	m_socket							= -1;
+    m_stop								= false;
+    m_thread_id							= 0;
+    m_use_reader_watcher				= true;
+    m_nb_acquired_images				= 0;
+    m_state								= DISCONNECTED;
+	
     m_imgpath                           = "/ramdisk/images/";
     m_file_name                         = "image_%.5d.cbf";
     m_file_pattern                      = m_file_name;
@@ -166,7 +168,7 @@ void Camera::_initVariable()
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
     m_exposure_per_frame                = 1;
-    m_nb_acquired_images 		= 0;
+    m_nb_acquired_images 				= 0;
 
     GAIN_SERVER_RESPONSE["low"]         = LOW;
     GAIN_SERVER_RESPONSE["mid"]         = MID;
@@ -555,31 +557,31 @@ void Camera::_run()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-bool Camera::isDirectoryWatcherEnabled()
+bool Camera::isReaderWatcher()
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    return m_use_dw;
+    return m_use_reader_watcher;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::enableDirectoryWatcher()
+void Camera::enableReaderWatcher()
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    m_use_dw = true;
+    m_use_reader_watcher = true;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::disableDirectoryWatcher()
+void Camera::disableReaderWatcher()
 {
     DEB_MEMBER_FUNCT();
     AutoMutex aLock(m_cond.mutex());
-    m_use_dw = false;
+    m_use_reader_watcher = false;
 }
 
 //-----------------------------------------------------
@@ -648,7 +650,7 @@ Camera::Status Camera::status() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-const std::string& Camera::errorMessage() const
+const std::string& Camera::_errorMessage() const
 {
     AutoMutex aLock(m_cond.mutex());
     return m_error_message;
@@ -657,7 +659,7 @@ const std::string& Camera::errorMessage() const
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::softReset()
+void Camera::_softReset()
 {
     AutoMutex aLock(m_cond.mutex());
     m_error_message.clear();
@@ -667,7 +669,7 @@ void Camera::softReset()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::hardReset()
+void Camera::_hardReset()
 {
     AutoMutex aLock(m_cond.mutex());
     send("resetcam");

@@ -60,9 +60,9 @@ public:
     std::string serverIP() const;
     int serverPort() const;
     
-	void enableDirectoryWatcher(void);
-	void disableDirectoryWatcher(void);
-	bool isDirectoryWatcherEnabled();
+	void enableReaderWatcher(void);
+	void disableReaderWatcher(void);
+	bool isReaderWatcher();
 
     void setImgpath(const std::string& path);
     const std::string& imgpath(void);
@@ -119,10 +119,9 @@ public:
     
 private:
     
-    const        std::string& errorMessage() const;
-    void         softReset();
-    void         hardReset();
-    void         quit();    
+    const        std::string& _errorMessage() const;
+    void         _softReset();
+    void         _hardReset();
     
     static void* _runFunc(void*);
     void         _run();    
@@ -146,7 +145,7 @@ private:
     mutable Cond            m_cond;
 
     //Cache variables
-    bool 					m_use_dw;
+    bool 					m_use_reader_watcher;
     std::string             m_error_message;
     double                  m_energy;
     double                  m_exposure;
