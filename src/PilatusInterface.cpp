@@ -239,6 +239,14 @@ void BufferCtrlObj::reset()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
+bool BufferCtrlObj::isTimeoutSignaled()
+{
+    return m_reader->isTimeoutSignaled();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void BufferCtrlObj::setTimeout(double TO)
 {
     DEB_MEMBER_FUNCT();
@@ -248,9 +256,9 @@ void BufferCtrlObj::setTimeout(double TO)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-bool BufferCtrlObj::isTimeoutSignaled()
+bool BufferCtrlObj::isRunning()
 {
-    return m_reader->isTimeoutSignaled();
+    return m_reader->isRunning();
 }
 
 //-----------------------------------------------------
@@ -649,6 +657,8 @@ void Interface::getStatus(StatusType& status)
         m_sync.getNbHwFrames(nbFrames);
         if(getNbHwAcquiredFrames() >= nbFrames || cam_status == Camera::OK)
         {
+            if(m_buffer.isRunning())
+                status.acq = AcqRunning;
             status.acq = AcqReady;
         }
         else

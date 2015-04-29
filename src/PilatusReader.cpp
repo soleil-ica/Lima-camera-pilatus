@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <algorithm>
 #include <math.h>
 #include "PilatusReader.h"
 #include "PilatusInterface.h"
@@ -235,6 +236,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                     std::string full_pattern = m_cam.imgpath() + "/" + m_cam.fileName();
                     std::string full_file_name(255, ' ');
                     sprintf(const_cast<char*>(full_file_name.data()), full_pattern.c_str(), m_image_number);
+                    std::remove(full_file_name.begin(), full_file_name.end(), ' '); //trim whitespace
 
                     DEB_TRACE() << "Force refreshing of nfs file system using ls command ";
                     // Force nfs file system to refresh !!
@@ -242,7 +244,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                     lsCommand << "ls " << m_cam.imgpath() << " 2>&1 > /dev/null";
                     system(lsCommand.str().c_str());
 
-                    DEB_TRACE() << "Check if file : " << full_file_name << " exist ?";
+                    DEB_TRACE() << "Check if file : [" << full_file_name << "] exist ?";
                     //- check if file exist
                     std::ifstream ifFile(full_file_name.c_str(), ios_base::in);
                     if (ifFile)
@@ -285,6 +287,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                     //initialisze image_number when first image arrived					
                     m_image_number = 0;
                 }
+
                 //- re-arm timeout
                 m_timeout.restart();
                 enable_periodic_msg(true);
@@ -294,6 +297,15 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
             case PILATUS_STOP_MSG:
             {
                 DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
+                // Remove *.tif files in the directory
+                DEB_TRACE() << "Remove '*.tif' files in the directory defined by 'imagePath ...";
+                std::stringstream rmCommand;
+                rmCommand  	<< "rm -f " 		// remove
+                << m_cam.imgpath()	// in the directory
+                << "/*.tif";		// all *.tif files
+                //<< " >& /dev/null" ; 	// & avoid print out
+                system(rmCommand.str().c_str());
+                DEB_TRACE() << rmCommand.str() << " done.";
                 enable_periodic_msg(false);
                 m_timeout.disable();
             }
