@@ -150,6 +150,7 @@ int Camera::serverPort() const
 //-----------------------------------------------------
 void Camera::_initVariable()
 {
+    AutoMutex aLock(m_cond.mutex());
     m_socket							= -1;
     m_stop								= false;
     m_thread_id							= 0;
@@ -168,7 +169,6 @@ void Camera::_initVariable()
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
     m_exposure_per_frame                = 1;
-    m_nb_acquired_images 				= 0;
 
     GAIN_SERVER_RESPONSE["low"]         = LOW;
     GAIN_SERVER_RESPONSE["mid"]         = MID;
