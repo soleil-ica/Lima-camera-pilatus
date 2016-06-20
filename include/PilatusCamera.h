@@ -28,6 +28,7 @@ public:
         SETTING_EXPOSURE_PERIOD,
         SETTING_HARDWARE_TRIGGER_DELAY,
         SETTING_EXPOSURE_PER_FRAME,
+        READ_TH,
         KILL_ACQUISITION,
         RUNNING,
         ANYCMD,
@@ -79,6 +80,7 @@ public:
 
     void setThreshold(double val);
     int threshold() const;
+    
     Gain gain() const;
     void setThresholdGain(int threshold,Gain gain = DEFAULT_GAIN);
 
@@ -90,7 +92,13 @@ public:
 
     int nbImagesInSequence() const;
     void setNbImagesInSequence(int nb);
-
+    
+    void sendTh();
+    void setTemperatureMax(std::vector<double> max);    
+    void setHumidityMax(std::vector<double> max);    
+    double temperature(unsigned short channel_num) const;
+    double humidity(unsigned short channel_num) const;
+    
     double hardwareTriggerDelay() const;
     void setHardwareTriggerDelay(double);
 
@@ -128,6 +136,7 @@ private:
     void         _initVariable();
     void         _resync();
     void         _reinit();
+    void         _decodeTh(const std::string& message);
     
     std::map<std::string,Gain>    GAIN_SERVER_RESPONSE;
     std::map<Gain,std::string>    GAIN_VALUE2SERVER;
@@ -161,6 +170,12 @@ private:
     std::string             m_file_name;
     std::string             m_file_pattern;    
     int						m_nb_acquired_images;
+    
+    //check Th
+    std::vector<double>     m_temperature;
+    std::vector<double>     m_humidity;
+    std::vector<double>     m_temperature_max;
+    std::vector<double>     m_humidity_max;    
 };
 }
 }

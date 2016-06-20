@@ -172,6 +172,15 @@ bool Reader::isRunning(void)
     return periodic_msg_enabled();
 }
 
+//---------------------------
+//- Reader::isStopRequest()
+//---------------------------
+bool Reader::isStopRequest(void)
+{
+    DEB_MEMBER_FUNCT();
+    yat::MutexLock scoped_lock(m_lock);
+    return m_stop_request;
+}
 
 //-----------------------------------------------------
 //
@@ -212,15 +221,13 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                 DEB_TRACE() << "-----------------------";
                 DEB_TRACE() << "Reader::->TASK_PERIODIC";
 
-                if(m_is_reader_watcher)
+                
+                if(m_is_reader_watcher) // need to read *.tif files in order to display the frames
                 {
                     DEB_TRACE() << "Check if stop is requested";
                     //- check if stop is requested
-                    {
-                        yat::MutexLock scoped_lock(m_lock);
-                        if(m_stop_request)
-                            break;
-                    }
+                    if(isStopRequest())
+                        break;
 
                     DEB_TRACE() << "Check if timeout expired";
                     //- check if timeout expired                    
@@ -255,21 +262,19 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                         addNewFrame(full_file_name);
                     }
                 }
-                else // use response of camserver at end of exposure to increment nb_frame once for all
+                else // need to simulate a nb_frame "null" frames at the end of camserver exposure & once for all
                 {
                     m_timeout.disable();
                     DEB_TRACE() << "Check response of CamServer at the end of exposure";
-                    if(m_cam.nbAcquiredImages() != 0 && !m_stop_request)
+                    if(m_cam.nbAcquiredImages() != 0 && !isStopRequest())
                     {
                         DEB_TRACE() << "-- Exposure succeded received from CamServer !"; //all images (nbImagesInSequence()) are acquired !
                         DEB_TRACE() << "-- Process all SIMULATED frames :";
                         for(int i = 0; i < m_cam.nbImagesInSequence(); i++)
                         {
-                            {
-                                yat::MutexLock scoped_lock(m_lock);
-                                if(m_stop_request)
-                                    break;
-                            }
+                            //- check if stop is requested
+                            if(isStopRequest())
+                                break;
                             DEB_TRACE() << "-- Add New Frame ...";
                             addNewFrame();
                         }
@@ -297,15 +302,16 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
             case PILATUS_STOP_MSG:
             {
                 DEB_TRACE() << "Reader::->PILATUS_STOP_MSG";
-                // Remove *.tif files in the directory
-                DEB_TRACE() << "Remove '*.tif' files in the directory defined by 'imagePath ...";
-                std::stringstream rmCommand;
-                rmCommand  	<< "rm -f " 		// remove
-                << m_cam.imgpath()	// in the directory
-                << "/*.tif";		// all *.tif files
-                //<< " >& /dev/null" ; 	// & avoid print out
-                system(rmCommand.str().c_str());
-                DEB_TRACE() << rmCommand.str() << " done.";
+                if(m_is_reader_watcher)
+                {
+                    // Remove *.tif files in the directory               
+                    DEB_TRACE() << "Remove '*.tif' files in the directory defined by 'imagePath ...";
+                    std::stringstream rmCommand;
+                    rmCommand  	<< "rm -f "<< m_cam.imgpath()<< "/*.tif";
+                    //<< " >& /dev/null" ; 	// & avoid print out
+                    system(rmCommand.str().c_str());
+                    DEB_TRACE() << rmCommand.str() << " done.";
+                }
                 enable_periodic_msg(false);
                 m_timeout.disable();
             }
@@ -362,13 +368,11 @@ void Reader::addNewFrame(const std::string & file_name)
         HwFrameInfoType frame_info;
         frame_info.acq_frame_nb = m_image_number;
 
-        {
-            //yat::MutexLock scoped_lock(m_lock);
-            if(!m_stop_request)
-                continueAcq = buffer_mgr.newFrameReady(frame_info);
-            else
-                continueAcq = false;
-        }
+        if(!isStopRequest())
+            continueAcq = buffer_mgr.newFrameReady(frame_info);
+        else
+            continueAcq = false;
+
 
         // if nb acquired image < requested frames
         if(continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
@@ -471,4 +475,5 @@ void Reader::readTiff(const std::string& file_name, void *ptr)
         TIFFClose(input_image);
     }
 }
+
 //-----------------------------------------------------

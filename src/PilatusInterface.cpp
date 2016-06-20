@@ -649,31 +649,43 @@ void Interface::getStatus(StatusType& status)
     Camera::Status cam_status = Camera::STANDBY;
     cam_status = m_cam.status();
 
-    if(cam_status == Camera::STANDBY || cam_status == Camera::KILL_ACQUISITION || cam_status == Camera::OK)
+
+    if(cam_status == Camera::OK)
+    {
+        status.det = DetIdle;
+        status.acq = AcqReady;
+    }
+    else if(cam_status == Camera::KILL_ACQUISITION)
+    {
+        status.det = DetIdle;
+        if(m_buffer.isRunning())
+            status.acq = AcqRunning;    
+        else if(m_buffer.isTimeoutSignaled())
+            status.acq = AcqFault;
+        else
+            status.acq = AcqReady;        
+    }
+    else if(cam_status == Camera::STANDBY)
     {
         status.det = DetIdle;
 
         int nbFrames = 0;
         m_sync.getNbHwFrames(nbFrames);
-        if(getNbHwAcquiredFrames() >= nbFrames || cam_status == Camera::OK)
-        {
-            if(m_buffer.isRunning())
-                status.acq = AcqRunning;
-            status.acq = AcqReady;
-        }
-        else
-        {
+        if(getNbHwAcquiredFrames() >= nbFrames)
+            status.acq = AcqReady;        
+        else if(m_buffer.isRunning())
             status.acq = AcqRunning;
-        }
-
-        status.acq = AcqReady;
+        else if(m_buffer.isTimeoutSignaled())
+            status.acq = AcqFault;
+        else
+            status.acq = AcqReady;
     }
     else if(cam_status == Camera::DISCONNECTED)
     {
         status.det = DetFault;
         status.acq = AcqFault;
     }
-    else if(cam_status == Camera::ERROR || m_buffer.isTimeoutSignaled())
+    else if(cam_status == Camera::ERROR)
     {
         status.det = DetIdle;
         status.acq = AcqFault;

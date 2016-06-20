@@ -30,6 +30,7 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <limits>
 
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -169,6 +170,8 @@ void Camera::_initVariable()
     m_exposure_period                   = -1.;
     m_hardware_trigger_delay            = -1.;
     m_exposure_per_frame                = 1;
+	m_temperature.clear();
+	m_humidity.clear();
 
     GAIN_SERVER_RESPONSE["low"]         = LOW;
     GAIN_SERVER_RESPONSE["mid"]         = MID;
@@ -242,8 +245,10 @@ void Camera::_resync()
     send(cmd.str());
     send("delay");
     send("nexpframe");
+	send("th");
     send("setackint 0");
     send("dbglvl 1");
+	
 }
 
 //-----------------------------------------------------
@@ -446,7 +451,7 @@ void Camera::_run()
                                 else // Exposures per frame
                                 {
                                     m_exposure_per_frame = atoi(real_message.substr(columnPos + 1).c_str());\
-                                                                }
+                                                                                                                                }
                                 if(m_state != Camera::RUNNING)
                                     m_state = Camera::STANDBY;
                             }
@@ -511,6 +516,12 @@ void Camera::_run()
                             m_nb_acquired_images = m_nimages;
                             std::string real_message = msg.substr(5);
                         }
+                        else if(msg.substr(2, 24) == "ERR *** killing exposure")
+                        {
+                            DEB_TRACE() << "-- Exposure killed";
+                            m_state = Camera::STANDBY;
+                            std::string real_message = msg.substr(6);
+                        }
                         else
                         {
                             DEB_TRACE() << "-- ERROR";
@@ -542,6 +553,24 @@ void Camera::_run()
                             DEB_TRACE() << "-- ERROR";
                             m_state = Camera::ERROR;
                             msg = msg.substr(2);
+                            m_error_message = msg.substr(msg.find(" "));
+                            DEB_TRACE() << m_error_message;
+                        }
+                    }
+                    else if(msg.substr(0, 4) == "215 ")
+                    {
+                        if(msg.substr(4, 2) == "OK")
+                        {
+                            DEB_TRACE() << "-- th reading succeeded";
+                            std::string real_message = msg.substr(7);
+                            _decodeTh(real_message);
+							m_state = Camera::OK;
+                        }
+                        else
+                        {
+                            DEB_TRACE() << "-- ERROR";
+                            m_state = Camera::ERROR;
+                            msg = msg.substr(3);
                             m_error_message = msg.substr(msg.find(" "));
                             DEB_TRACE() << m_error_message;
                         }
@@ -760,8 +789,6 @@ void Camera::setThresholdGain(int value, Camera::Gain gain)
 
         send(buffer);
     }
-
-
     if (m_gap_fill)
         send("gapfill -1");
 }
@@ -838,6 +865,59 @@ void Camera::setNbImagesInSequence(int nb)
     std::stringstream msg;
     msg << "nimages " << nb;
     send(msg.str());
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::sendTh()
+{
+    DEB_MEMBER_FUNCT();
+    AutoMutex aLock(m_cond.mutex());
+    WAIT_UNTIL(Camera::STANDBY, "Could not set the command th , server not idle");
+    m_state = Camera::READ_TH;
+    send("th");
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setTemperatureMax(std::vector<double> max)
+{
+    m_temperature_max = max;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------    
+void Camera::setHumidityMax(std::vector<double> max)
+{
+    m_humidity_max = max;
+}
+
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double Camera::temperature(unsigned short channel_num) const
+{
+	AutoMutex aLock(m_cond.mutex());	
+	if(channel_num < m_temperature.size())
+		return m_temperature.at(channel_num);
+	else
+		return std::numeric_limits<double>::quiet_NaN();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+double Camera::humidity(unsigned short channel_num) const
+{
+	AutoMutex aLock(m_cond.mutex());	
+	if(channel_num < m_humidity.size())
+		return m_humidity.at(channel_num);
+	else
+		return std::numeric_limits<double>::quiet_NaN();
 }
 
 //-----------------------------------------------------
@@ -937,10 +1017,33 @@ void Camera::startAcquisition(int image_number)
     char filename[256];
     snprintf(filename, sizeof(filename), m_file_pattern.c_str(), image_number);
 
-    msg.clear();
-    //Start Acquisition
-
+    msg.clear();    
+    
+    
+    //wait STANDBY or ERROR
     WAIT_UNTIL(Camera::STANDBY, "Could not start Acquisition, server not idle");
+    
+	DEB_TRACE()<<"ask for Temperature & Humidity";
+	send("th");
+
+    //check temperature
+	DEB_TRACE()<<"check temperature limits";
+    for (int i = 0; i< m_temperature_max.size() && i<m_temperature.size() ; i++)
+    {
+        if(m_temperature.at(i)>=m_temperature_max.at(i))
+            THROW_HW_ERROR(Error) << "Could not start acquisition, Temperature (channel "<<i<<") = "<<m_temperature.at(i)<<" is out of limits = "<<m_temperature_max.at(i);
+    }
+
+    //check humidity
+	DEB_TRACE()<<"check humidity limits";
+    for (int i = 0; i< m_humidity_max.size() && i<m_humidity.size() ; i++)
+    {
+        if(m_humidity.at(i)>=m_humidity_max.at(i))
+            THROW_HW_ERROR(Error) << "Could not start acquisition, Humidity (channel "<<i<<") = "<<m_humidity.at(i)<<" is out of limits = "<<m_humidity_max.at(i);
+    }
+    
+    //Start Acquisition    
+	std::cout<<"Start Acquisition"<<std::endl;
     m_state = Camera::RUNNING;
     if(m_trigger_mode == Camera::EXTERNAL_SINGLE)
     {
@@ -962,7 +1065,6 @@ void Camera::startAcquisition(int image_number)
         msg << "exposure " << filename;
         send(msg.str());
     }
-
     if(m_trigger_mode != Camera::INTERNAL_SINGLE || m_trigger_mode != Camera::INTERNAL_MULTI)
         m_cond.wait(TIME_OUT);
 
@@ -1031,8 +1133,8 @@ std::string Camera::sendAnyCommandAndGetErrorMsg(const std::string& message)
     send(message);
 
     while(  m_state != Camera::STANDBY &&
-          m_state != Camera::ERROR &&
-          m_state != Camera::DISCONNECTED)
+    m_state != Camera::ERROR &&
+    m_state != Camera::DISCONNECTED)
     {
         if(!m_cond.wait(TIME_OUT))
             return "Timeout";
@@ -1058,3 +1160,29 @@ int Camera::nbAcquiredImages()
 }
 
 //-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::_decodeTh(const std::string& message)
+{
+    m_temperature.clear();
+    m_humidity.clear();
+    std::istringstream reply_stream(message);
+    std::string line;
+    while (std::getline(reply_stream, line))
+    {
+        std::istringstream line_stream(line);
+        std::string s;
+        char c;
+        int num;
+        double temp;
+        double humidity;
+        //Channel >> 0 >> : >> Temperature >> = >> 30.9 >> C >> , >> Rel. Humidity >> = >> 28.3" 
+        line_stream >> s >> num >> c >> s >> c >> temp >> c >> c >> s >> c >> s >> c >> humidity; // JuJu power ;-P
+        m_temperature.push_back(temp);
+        m_humidity.push_back(humidity);
+    }
+	return ;
+}
+
+//-----------------------------------------------------
+

@@ -89,7 +89,7 @@ private:
     void addNewFrame(const std::string& file_name = "SIMULATED");
     void readTiff(const std::string& file_name, void *ptr);
     void dummyHandler(const char* module, const char* fmt, va_list ap);
-
+    bool isStopRequest(void);
     //- Mutex
     yat::Mutex m_lock;
     Camera& m_cam;
