@@ -879,45 +879,46 @@ void Camera::sendTh()
     send("th");
 }
 
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Camera::setTemperatureMax(std::vector<double> max)
-{
-    m_temperature_max = max;
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------    
-void Camera::setHumidityMax(std::vector<double> max)
-{
-    m_humidity_max = max;
-}
-
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
 double Camera::temperature(unsigned short channel_num) const
 {
+    DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());	
 	if(channel_num < m_temperature.size())
 		return m_temperature.at(channel_num);
 	else
-		return std::numeric_limits<double>::quiet_NaN();
+        THROW_HW_ERROR(Error) << "channel_num must be lower than the nb. of temperature sensors";
+	return std::numeric_limits<double>::quiet_NaN();
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
+int Camera::nbTHSensors() const
+{
+    DEB_MEMBER_FUNCT();
+    AutoMutex aLock(m_cond.mutex());
+    if(m_temperature.size() != m_humidity.size() || m_temperature.size() ==0 || m_humidity.size() ==0)
+        THROW_HW_ERROR(Error) << "unable to define the nb. of temperature/humidity sensors";
+    else
+        return m_temperature.size();
+    return 0;
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 double Camera::humidity(unsigned short channel_num) const
 {
+    DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());	
 	if(channel_num < m_humidity.size())
 		return m_humidity.at(channel_num);
 	else
-		return std::numeric_limits<double>::quiet_NaN();
+        THROW_HW_ERROR(Error) << "channel_num must be lower than the nb. of humidity sensors";        
+    return std::numeric_limits<double>::quiet_NaN();
 }
 
 //-----------------------------------------------------
@@ -1022,25 +1023,6 @@ void Camera::startAcquisition(int image_number)
     
     //wait STANDBY or ERROR
     WAIT_UNTIL(Camera::STANDBY, "Could not start Acquisition, server not idle");
-    
-	DEB_TRACE()<<"ask for Temperature & Humidity";
-	send("th");
-
-    //check temperature
-	DEB_TRACE()<<"check temperature limits";
-    for (int i = 0; i< m_temperature_max.size() && i<m_temperature.size() ; i++)
-    {
-        if(m_temperature.at(i)>=m_temperature_max.at(i))
-            THROW_HW_ERROR(Error) << "Could not start acquisition, Temperature (channel "<<i<<") = "<<m_temperature.at(i)<<" is out of limits = "<<m_temperature_max.at(i);
-    }
-
-    //check humidity
-	DEB_TRACE()<<"check humidity limits";
-    for (int i = 0; i< m_humidity_max.size() && i<m_humidity.size() ; i++)
-    {
-        if(m_humidity.at(i)>=m_humidity_max.at(i))
-            THROW_HW_ERROR(Error) << "Could not start acquisition, Humidity (channel "<<i<<") = "<<m_humidity.at(i)<<" is out of limits = "<<m_humidity_max.at(i);
-    }
     
     //Start Acquisition    
 	std::cout<<"Start Acquisition"<<std::endl;

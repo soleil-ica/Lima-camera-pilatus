@@ -634,9 +634,8 @@ void Interface::startAcq()
 void Interface::stopAcq()
 {
     DEB_MEMBER_FUNCT();
-    m_buffer.stop();
     m_cam.stopAcquisition();
-
+    m_buffer.stop();    
 }
 
 //-----------------------------------------------------

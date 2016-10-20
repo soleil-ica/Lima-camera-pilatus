@@ -94,10 +94,9 @@ public:
     void setNbImagesInSequence(int nb);
     
     void sendTh();
-    void setTemperatureMax(std::vector<double> max);    
-    void setHumidityMax(std::vector<double> max);    
     double temperature(unsigned short channel_num) const;
     double humidity(unsigned short channel_num) const;
+    int nbTHSensors() const;
     
     double hardwareTriggerDelay() const;
     void setHardwareTriggerDelay(double);
@@ -174,8 +173,6 @@ private:
     //check Th
     std::vector<double>     m_temperature;
     std::vector<double>     m_humidity;
-    std::vector<double>     m_temperature_max;
-    std::vector<double>     m_humidity_max;    
 };
 }
 }
