@@ -5,6 +5,16 @@
 ///////////////////////////////////////////////////////////
 // YAT::TASK 
 ///////////////////////////////////////////////////////////
+//undef some Mx library CONSTANTS, otherwise compilation errors  with Yat/utils/Loging.h enum ELogLevel
+#undef LOG_INFO
+#undef LOG_EMERG
+#undef LOG_ALERT
+#undef LOG_CRIT
+#undef LOG_ERR
+#undef LOG_WARNING
+#undef LOG_NOTICE
+#undef LOG_INFO
+#undef LOG_DEBUG
 #include <yat/threading/Task.h>
 #include <yat/file/FileName.h>
 
