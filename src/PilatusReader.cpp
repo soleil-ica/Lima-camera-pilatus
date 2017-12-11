@@ -376,7 +376,7 @@ void Reader::addNewFrame(const std::string & file_name)
         }
         else
         {
-            yat::ThreadingUtilities::sleep(0, 5000000); //5 ms
+            yat::ThreadingUtilities::sleep(0, 1000000); //1 ms
         }
 
         DEB_TRACE() << "-- newFrameReady";
