@@ -28,11 +28,6 @@
             <version>1.7.9</version>
         </dependency>
         
-        <!-- <dependency>
-            <groupId>ncsa.uiuc.edu</groupId>
-            <artifactId>HDF5-${aol}-shared-release</artifactId>
-        </dependency>  -->       
-        
         <dependency>
             <groupId>org.remotesensing</groupId>
             <artifactId>tiff-${aol}-shared-release</artifactId>
