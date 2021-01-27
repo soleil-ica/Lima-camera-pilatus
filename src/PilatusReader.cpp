@@ -241,10 +241,9 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
 
                     //- get full image name as full/path/pattern_%5d.tif
                     std::string full_pattern = m_cam.imgpath() + "/" + m_cam.fileName();
-                    std::string full_file_name(255, ' ');
+                    std::string full_file_name(255, '\0');
                     sprintf(const_cast<char*>(full_file_name.data()), full_pattern.c_str(), m_image_number);
                     std::remove(full_file_name.begin(), full_file_name.end(), ' '); //trim whitespace
-
                     DEB_TRACE() << "Force refreshing of nfs file system using ls command ";
                     // Force nfs file system to refresh !!
                     std::stringstream ls_command;
