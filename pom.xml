@@ -27,20 +27,12 @@
             <artifactId>LimaCore-${aol}-shared-${mode}</artifactId>
             <version>1.7.10</version>
         </dependency>
-		
-		<!-- add NexusCPP and force to 3.3.6 to avoid getting 3.3.7 (don't know why ...) -->
-		<dependency>
-			<groupId>fr.soleil.lib</groupId>
-			<artifactId>NexusCPP-${aol}-shared-${mode}</artifactId>
-			<version>3.3.6</version>
-		</dependency>
         
         <dependency>
             <groupId>org.remotesensing</groupId>
             <artifactId>tiff-${aol}-shared-release</artifactId>
             <version>4.0.3</version>
-        </dependency>
-                     
+        </dependency>        
     </dependencies>
 
     <build>
