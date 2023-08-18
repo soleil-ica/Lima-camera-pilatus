@@ -1,0 +1,101 @@
+[USER_VARIABLES]
+currentframe =0
+[END]
+
+[ABOUT]
+reply = "\n"+str(author)+"\n"+str(company)+"\n"+str(group)+"\n"+str(version)+"\n"
+verbose = True
+[END]
+
+[ECHO]
+index = command.find(delimiter)
+reply = command[index+1:]
+verbose = True
+[END]
+
+
+[nimages]
+index = command.find(delimiter)
+nbframes= command[index+1:]
+reply = "15 OK N images set to: "+nbframes
+verbose = True
+[END]
+
+[imgpath]
+reply = "10 OK /home/det/p2_det/images/"
+verbose = True
+[END]
+
+
+[exptime]
+index = command.find(delimiter)
+exptime= command[index+1:]
+reply = "15 OK Exposure time set to: "+exptime+" sec"
+verbose = True
+[END]
+
+[expperiod]
+index = command.find(delimiter)
+expperiod= command[index+1:]
+reply = "15 OK Exposure time set to: "+expperiod+" sec"
+verbose = True
+[END]
+
+[exposure]
+index = command.find(delimiter)
+exposure= command[index+1:]
+#reply = "15 OK  Starting 0.1970000 second background: 2011-Aug-04T15:33:03.178"
+def callback():
+    print("copy file today_00000.tif to /home/informatique/ica/noureddine/DeviceServers/data/pilatus/")
+    output = subprocess.check_output("cp -f /home/informatique/ica/noureddine/DeviceServers/data/today_00000.tif /home/informatique/ica/noureddine/DeviceServers/data/pilatus/", stderr=subprocess.STDOUT,shell=True)
+
+timer = threading.Timer(1.0, callback)
+timer.start()
+
+reply = "7 OK /ramdisk/tmp/Arafat/today_00000.cbf"
+verbose = True
+[END]
+
+[setthreshold]
+arguments = command.split(' ')
+nb_arguments = arguments.len()
+if nb_arguments == 1 :
+	reply = "15 OK  Settings: mid gain; threshold: 6300 eV; vcmp: 0.654 V"
+else:
+	reply = "15 OK /tmp/setthreshold.cmd"
+verbose = True
+[END]
+
+[nexpframe]
+index = command.find(delimiter)
+nbexposure= command[index+1:]
+reply = "15 OK  nexpframe?????? "
+verbose = True
+[END]
+
+[delay]
+index = command.find(delimiter)
+nbexposure= command[index+1:]
+reply = "15 OK  delay?????? "
+verbose = True
+[END]
+
+[th]
+verbose = True
+[END]
+
+[k]
+
+reply = "7 OK /ramdisk/tmp/Arafat/today_00000.cbf"
+verbose = True
+[END]
+
+
+
+[OS]
+command = command.split(delimiter)
+output = subprocess.check_output(command[1], stderr=subprocess.STDOUT,shell=True)
+output = output.decode('ascii', errors='ignore').encode('ascii')
+reply = "\n"+output+globals()['from_string_to_ascii'](send_eol)
+verbose = True
+[END]
