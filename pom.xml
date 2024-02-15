@@ -9,7 +9,7 @@
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
     <artifactId>LimaPilatus-${aol}-shared-${mode}</artifactId>
-    <version>2.2.1</version>
+    <version>2.2.2</version>
 	
     <packaging>nar</packaging>
     <name>LimaPilatus</name>

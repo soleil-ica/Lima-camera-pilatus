@@ -98,6 +98,7 @@ private:
     //notify Lima that a new frame is ready (it's a simulated frame filled with 0 )
     void addNewFrame(const std::string& file_name = "SIMULATED");
     void readTiff(const std::string& file_name, void *ptr);
+    void listFilesInPath(const std::string& path,const std::string& ext, std::vector<std::string>& files);
     void dummyHandler(const char* module, const char* fmt, va_list ap);
     bool isStopRequest(void);
     //- Mutex

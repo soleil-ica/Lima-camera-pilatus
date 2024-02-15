@@ -320,10 +320,20 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
 					ssmsg.str("");
 					ssmsg<<"Remove '*.tif' files in the directory defined by imagePath : "<<m_cam.imgpath()<<std::endl;
                     DEB_TRACE() << ssmsg.str();
-                    std::stringstream rm_command;
-                    rm_command  	<< "rm -f "<< m_cam.imgpath()<< "/*.tif";
-                    //<< " >& /dev/null" ; 	// & avoid print out
-                    system(rm_command.str().c_str());
+                    std::vector<std::string> tif_files;
+                    listFilesInPath(m_cam.imgpath(),".tif",tif_files);
+                    for(size_t i=0; i<tif_files.size(); i++)
+                    {
+                        std::string full_file_name = m_cam.imgpath() + "/" + tif_files.at(i);
+                        yat::FileName input_file(full_file_name);
+                        if(input_file.file_exist() && input_file.file_access())
+                        {
+                            input_file.remove();
+                            ssmsg.str("");
+                            ssmsg<<"-- Removed File [" << full_file_name << "]"<<std::endl;
+                            DEB_TRACE() << ssmsg.str(); 
+                        }
+                    }
                 }
                 enable_periodic_msg(false);
                 m_timeout.disable();
@@ -358,7 +368,7 @@ void Reader::addNewFrame(const std::string & file_name)
         StdBufferCbMgr& buffer_mgr = ((reinterpret_cast<BufferCtrlObj&>(m_buffer)).getBufferCbMgr());
         bool continueAcq = false;
         int buffer_nb, concat_frame_nb;
-        DEB_TRACE() << "-- #image n°: " << m_image_number << " acquired !";
+        DEB_TRACE() << "-- #image nï¿½: " << m_image_number << " acquired !";
         buffer_mgr.setStartTimestamp(Timestamp::now());
         buffer_mgr.acqFrameNb2BufferNb(m_image_number, buffer_nb, concat_frame_nb);
 
@@ -489,4 +499,16 @@ void Reader::readTiff(const std::string& file_name, void *ptr)
     }
 }
 
+//-----------------------------------------------------
+void Reader::listFilesInPath(const std::string& path,const std::string& ext, std::vector<std::string>& files)
+{
+    yat::FileEnum fe(path, yat::FileEnum::ENUM_FILE);
+    while( fe.find() )
+    {
+      if( fe.ext() == "tif" )
+      {
+        files.push_back(fe.full_name());
+      }
+    }
+}
 //-----------------------------------------------------
