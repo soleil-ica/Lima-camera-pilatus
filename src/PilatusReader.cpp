@@ -14,9 +14,9 @@
 //---------------------------
 Reader::Reader(Camera& cam, HwDetInfoCtrlObj& detinfo, HwBufferCtrlObj& buffer_ctrl)
 : yat::Task(Config(false, //- disable timeout msg
-                   kTASK_PERIODIC_MS, //- every second (i.e. 1000 msecs)
+                   kTASK_PERIODIC_TIMEOUT_MS, //- 
                    false, //- enable periodic msgs
-                   kTASK_PERIODIC_TIMEOUT_MS, //- every second (i.e. 1000 msecs)
+                   kTASK_PERIODIC_MS, //- 
                    false, //- don't lock the internal mutex while handling a msg (recommended setting)
                    kDEFAULT_LO_WATER_MARK, //- msgQ low watermark value
                    kDEFAULT_HI_WATER_MARK, //- msgQ high watermark value
@@ -31,7 +31,8 @@ m_buffer(buffer_ctrl)
     {
         m_det_info.getMaxImageSize(m_image_size);
         m_image_number = -1;
-        m_timeout_value = kDEFAULT_READER_TIMEOUT_MSEC / 1000.;
+        m_timeout_ms_value = kDEFAULT_READER_TIMEOUT_MS;
+        m_periodic_ms_value = kTASK_PERIODIC_MS;
         m_is_reader_watcher = m_cam.isReaderWatcher();
     }
     catch(yat::Exception& ex)
@@ -72,8 +73,8 @@ void Reader::start()
         expo_time = m_cam.exposure();
         yat::MutexLock scoped_lock(m_lock);
         DEB_TRACE() << "expo_time = " << expo_time;
-        DEB_TRACE() << "set timeout value = " << (expo_time + m_timeout_value)*1000. << " ms";
-        m_timeout.set_value((expo_time + m_timeout_value)*1000.); //*1000. because m_timeout is in ms
+        DEB_TRACE() << "set timeout value = " << (expo_time*1000. + m_timeout_ms_value)<< " ms";
+        m_timeout.set_value((expo_time*1000. + m_timeout_ms_value)); 
         post(new yat::Message(PILATUS_START_MSG), kPOST_MSG_TMO);
     }
     catch(Exception &e)
@@ -141,6 +142,18 @@ int Reader::getLastAcquiredFrame(void)
     return m_image_number;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Reader::setPeriodicMs(double val)
+{
+    DEB_MEMBER_FUNCT();
+    DEB_PARAM() << DEB_VAR1(val);
+    yat::MutexLock scoped_lock(m_lock);
+    m_periodic_ms_value = val;
+    set_periodic_msg_period(m_periodic_ms_value);
+}
+
 //---------------------------
 //- Reader::isTimeoutSignaled()
 //---------------------------
@@ -154,14 +167,31 @@ bool Reader::isTimeoutSignaled()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Reader::setTimeout(double timeout_val)
+void Reader::setTimeoutMs(double val)
 {
     DEB_MEMBER_FUNCT();
-    DEB_PARAM() << DEB_VAR1(timeout_val);
+    DEB_PARAM() << DEB_VAR1(val);
     yat::MutexLock scoped_lock(m_lock);
-    m_timeout_value = timeout_val;
+    m_timeout_ms_value = val;
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Reader::deleteRemainingFiles(void)
+{
+    DEB_MEMBER_FUNCT();
+    try
+    {
+        post(new yat::Message(PILATUS_DELETE_REMAINIG_FILES_MSG), kPOST_MSG_TMO);
+    }
+    catch(yat::Exception& ex)
+    {
+        // Error handling
+        DEB_ERROR() << ex.errors[0].desc;
+        throw LIMA_HW_EXC(Error, ex.errors[0].desc);
+    }
+}
 //---------------------------
 //- Reader::isRunning()
 //---------------------------
@@ -199,7 +229,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                 //- set unit in seconds
                 m_timeout.set_unit(yat::Timeout::TMO_UNIT_MSEC);
                 //- set default timeout value
-                m_timeout.set_value(kDEFAULT_READER_TIMEOUT_MSEC);
+                m_timeout.set_value(kDEFAULT_READER_TIMEOUT_MS);
             }
                 break;
                 //-----------------------------------------------------
@@ -315,7 +345,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                         cam_status = m_cam.status();
                     }
                     while(cam_status == Camera::KILL_ACQUISITION);
-					
+
                     // Remove *.tif files in the directory     
 					ssmsg.str("");
 					ssmsg<<"Remove '*.tif' files in the directory defined by imagePath : "<<m_cam.imgpath()<<std::endl;
@@ -324,7 +354,8 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                     listFilesInPath(m_cam.imgpath(),".tif",tif_files);
                     for(size_t i=0; i<tif_files.size(); i++)
                     {
-                        std::string full_file_name = m_cam.imgpath() + "/" + tif_files.at(i);
+                        //DEB_TRACE<<"tif_files.at(i) : "<<tif_files.at(i)<<std::endl;
+                        std::string full_file_name = tif_files.at(i);
                         yat::FileName input_file(full_file_name);
                         if(input_file.file_exist() && input_file.file_access())
                         {
@@ -333,7 +364,7 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                             ssmsg<<"-- Removed File [" << full_file_name << "]"<<std::endl;
                             DEB_TRACE() << ssmsg.str(); 
                         }
-                    }
+                    }                   
                 }
                 enable_periodic_msg(false);
                 m_timeout.disable();
@@ -347,6 +378,32 @@ void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
                 m_timeout.disable();
             }
                 break;
+                //-----------------------------------------------------
+            case PILATUS_DELETE_REMAINIG_FILES_MSG:
+            {
+                DEB_TRACE() << "Reader::->PILATUS_DELETE_REMAINIG_FILES_MSG";
+                // Remove *.tif files in the directory     
+                std::stringstream ssmsg("");
+                ssmsg.str("");
+                ssmsg<<"Remove '*.tif' files in the directory defined by imagePath : "<<m_cam.imgpath()<<std::endl;
+                DEB_TRACE() << ssmsg.str();
+                std::vector<std::string> tif_files;
+                listFilesInPath(m_cam.imgpath(),".tif",tif_files);
+                for(size_t i=0; i<tif_files.size(); i++)
+                {
+                    //DEB_TRACE<<"tif_files.at(i) : "<<tif_files.at(i)<<std::endl;
+                    std::string full_file_name = tif_files.at(i);
+                    yat::FileName input_file(full_file_name);
+                    if(input_file.file_exist() && input_file.file_access())
+                    {
+                        input_file.remove();
+                        ssmsg.str("");
+                        ssmsg<<"-- Removed File [" << full_file_name << "]"<<std::endl;
+                        DEB_TRACE() << ssmsg.str(); 
+                    }
+                } 
+            }
+                break;                
                 //-----------------------------------------------------
         }
     }
@@ -396,7 +453,19 @@ void Reader::addNewFrame(const std::string & file_name)
         else
             continueAcq = false;
 
-
+        //remove file_name.tif 
+        std::stringstream ssmsg("");
+        yat::FileName input_file(file_name);
+        ssmsg<<"Check if file : [" << file_name << "] exist ?"<<std::endl;
+        DEB_TRACE() << ssmsg.str(); 
+        if(input_file.file_exist() && input_file.file_access())
+        {
+            input_file.remove();
+            ssmsg.str(""); 
+            ssmsg<<"-- Removed File [" << file_name << "]"<<std::endl;
+            DEB_TRACE() << ssmsg.str(); 
+        }
+        
         // if nb acquired image < requested frames
         if(continueAcq && (!m_cam.nbImagesInSequence() || m_image_number < (m_cam.nbImagesInSequence() - 1)))
         {
