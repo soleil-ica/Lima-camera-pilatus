@@ -25,13 +25,15 @@
 
 #define kPOST_MSG_TMO       2
 
-const size_t kTASK_PERIODIC_TIMEOUT_MS = 1000;
+const size_t kTASK_PERIODIC_TIMEOUT_MS = 5000;
 const size_t kTASK_PERIODIC_MS = 1000;
 const size_t PILATUS_START_MSG = (yat::FIRST_USER_MSG + 300);
 const size_t PILATUS_STOP_MSG = (yat::FIRST_USER_MSG + 301);
 const size_t PILATUS_RESET_MSG = (yat::FIRST_USER_MSG + 302);
+const size_t PILATUS_DELETE_REMAINIG_FILES_MSG = (yat::FIRST_USER_MSG + 303);
 
-const double kDEFAULT_READER_TIMEOUT_MSEC = 10000.;
+
+const double kDEFAULT_READER_TIMEOUT_MS = 10000.;
 
 ///////////////////////////////////////////////////////////
 
@@ -83,10 +85,13 @@ public:
     void reset();
     //return the number of acquired images
     int getLastAcquiredFrame(void);
+    //- define periodic (ms) of Reader
+    void setPeriodicMs(double val);    
     //- return is watching is end with a time-out (time counting is begin at START & end at STOP)
     bool isTimeoutSignaled(void);
     //- define max allowed time to _read image file
-    void setTimeout(double timeout_val);
+    void setTimeoutMs(double val);
+    void deleteRemainingFiles(void);
     //- return if Reader is running (periodic_message enabled) for a file
     bool isRunning(void);
 
@@ -109,7 +114,8 @@ private:
     int m_image_number;
     //- Timeout management (while processing image file)
     yat::Timeout m_timeout;
-    double m_timeout_value;
+    double m_timeout_ms_value;
+    double m_periodic_ms_value;
     bool m_stop_request;
     //watching for a file located at imagePath
     bool m_is_reader_watcher;

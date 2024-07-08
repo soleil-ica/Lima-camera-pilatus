@@ -112,8 +112,10 @@ public:
     }
     ;
     int getLastAcquiredFrame();
+    void setPeriodicMs(double period);
     bool isTimeoutSignaled(void);
-    void setTimeout(double TO);
+    void setTimeoutMs(double to);
+    void deleteRemainingFiles(void);
     bool isRunning(void);
     virtual void registerFrameCallback(HwFrameCallback& frame_cb);
     virtual void unregisterFrameCallback(HwFrameCallback& frame_cb);
@@ -201,7 +203,10 @@ public:
     {
         return m_cam;
     }
-    void setTimeout(double TO);
+    
+    void setPeriodicMs(double val);
+    void setTimeoutMs(double val);
+    void deleteRemainingFiles(void);
 
 private:
     Camera& m_cam;

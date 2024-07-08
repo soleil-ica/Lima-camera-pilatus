@@ -236,6 +236,17 @@ void BufferCtrlObj::reset()
     m_reader->reset();
 }
 
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void BufferCtrlObj::setPeriodicMs(double val)
+{
+    DEB_MEMBER_FUNCT();
+    m_reader->setPeriodicMs(val);
+}
+
+
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -247,12 +258,20 @@ bool BufferCtrlObj::isTimeoutSignaled()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void BufferCtrlObj::setTimeout(double TO)
+void BufferCtrlObj::setTimeoutMs(double val)
 {
     DEB_MEMBER_FUNCT();
-    m_reader->setTimeout(TO);
+    m_reader->setTimeoutMs(val);
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void BufferCtrlObj::deleteRemainingFiles(void)
+{
+    DEB_MEMBER_FUNCT();
+    m_reader->deleteRemainingFiles();
+}
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
@@ -761,9 +780,25 @@ double Interface::getEnergy(void)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Interface::setTimeout(double TO)
+void Interface::setPeriodicMs(double val)
 {
     DEB_MEMBER_FUNCT();
-    m_buffer.setTimeout(TO);
+    m_buffer.setPeriodicMs(val);
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::setTimeoutMs(double val)
+{
+    DEB_MEMBER_FUNCT();
+    m_buffer.setTimeoutMs(val);
+}
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Interface::deleteRemainingFiles(void)
+{
+    DEB_MEMBER_FUNCT();
+    m_buffer.deleteRemainingFiles();
 }
 //-----------------------------------------------------
