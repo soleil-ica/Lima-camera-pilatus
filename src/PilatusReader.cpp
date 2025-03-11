@@ -215,7 +215,7 @@ bool Reader::isStopRequest(void)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Reader::handle_message(yat::Message& msg) throw(yat::Exception)
+void Reader::handle_message(yat::Message& msg)
 {
     DEB_MEMBER_FUNCT();
     try
