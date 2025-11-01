@@ -97,7 +97,7 @@ public:
 
     //- [yat::Task implementation]
 protected:
-    virtual void handle_message(yat::Message& msg)
+    virtual void handle_message(yat::Message& msg);
 
 private:
     //notify Lima that a new frame is ready (it's a simulated frame filled with 0 )
