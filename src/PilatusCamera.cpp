@@ -522,6 +522,12 @@ void Camera::_run()
                             m_state = Camera::STANDBY;
                             std::string real_message = msg.substr(6);
                         }
+                        else if(msg.substr(2, 3) == "ERR")
+                        {
+                            DEB_TRACE() << "-- End of acquisition killing";
+                            m_state = Camera::STANDBY;
+                            std::string real_message = msg.substr(5);
+                        }
                         else
                         {
                             DEB_TRACE() << "-- ERROR";
