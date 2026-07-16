@@ -3,7 +3,7 @@
 # --------------------------------------------------------------------------
 
 find_package(yat CONFIG REQUIRED)
-find_package(tiff CONFIG REQUIRED)
+find_package(libtiff CONFIG REQUIRED)
 
 # --------------------------------------------------------------------------
 # Collect sources and includes
@@ -27,7 +27,7 @@ target_link_libraries(limapilatus
     PUBLIC 
         limacore
         yat::yat
-        tiff::tiff
+        libtiff::libtiff
 )
 
 limatools_set_library_soversion(limapilatus "VERSION")
